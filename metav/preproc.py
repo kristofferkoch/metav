@@ -13,11 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
-import re
+import re,os.path
 
-def _include(m, path, defines):
+def _include(m, incpath, defines):
     filename = m.group(1)
-    return preproc(filename, path, defines)
+    for p in incpath:
+        p = os.path.join(p, filename)
+        if os.path.isfile(p):
+            return preproc(p, incpath, defines)
+    raise IOError("Could not find %s in include path" % (filename, ))
 
 def _macro(m, path, defines):
     macro = m.group(1)
@@ -43,10 +47,10 @@ regexs = (
 
 regexs = [(re.compile(r), a) for (r, a) in regexs]
 
-def preproc(filename, path = ('.',), defines = {}):
+def preproc(filename, incpath = ('.',), defines = {}):
     cont = open(filename).read()
     return "`file(%s)" % filename + \
-        _process(cont, path, defines) +\
+        _process(cont, incpath, defines) +\
         "`endfile(%s)" % filename
     
 def _process(cont, path, defines):

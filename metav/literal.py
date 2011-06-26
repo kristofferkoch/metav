@@ -14,13 +14,14 @@
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+from vast import Expression
 
 UNSIZED = re.compile(r'^[0-9]+$')
 BIN     = re.compile(r'^(?P<size>[0-9]*)\'[bB](?P<bin>[01_zxZX?]+)$')
 DEC     = re.compile(r'^(?P<size>[0-9]*)\'[dD](?P<dec>[0-9_]+)$')
 HEX     = re.compile(r'^(?P<size>[0-9]*)\'[hH](?P<hex>[0-9a-fA-FzxZX?_]+)$')
 
-class VerilogNumber(object):
+class VerilogNumber(Expression):
     def __init__(self, string):
         self.orig = string
         unz = UNSIZED.match(string)

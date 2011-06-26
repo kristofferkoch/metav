@@ -1,18 +1,3 @@
-# This file is part of metav.
-
-# metav is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# metav is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
-# License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with metav.  If not, see <http://www.gnu.org/licenses/>.
-
 import ply.yacc
 from ply.yacc import GRAMMAR as G
 from lex import tokens
@@ -29,18 +14,22 @@ def p_source(p):
 def p_empty(p):
     p[0] = None
 
-@G("module : MODULE ID list_of_modports_opt ';' module_items ENDMODULE")
+@G("module : MODULE id list_of_ports_opt ';' module_items ENDMODULE")
 def p_module(p):
     p[0] = ast.Module(p[2], p[3], p[5])
 
-@G("""list_of_modports_opt : empty
-                           | list_of_modports""")
-def p_list_of_modports_opt(p):
-    p[0] = p[1]
+@G("id : ID")
+def p_id(p):
+    p[0] = p.slice[1]
 
-@G("list_of_modports : '(' modports_opt ')'")
-def p_list_of_modports(p):
-    p[0] = p[2]
+@G("""list_of_ports_opt : empty
+                        | '(' list_of_ids ')'
+                        | '(' modports_opt ')'""")
+def p_list_of_ports_opt(p):
+    if p[1]:
+        p[0] = p[2]
+    else:
+        p[0] = p[1]
 
 @G("""modports_opt : empty
                    | modports""")
@@ -48,19 +37,28 @@ def p_modports_opt(p):
     p[0] = p[1]
 
 @G("""modports : modport
-               | modport ',' modports""")
+               | modports ',' modport
+               | modports ',' id""")
 def p_modports(p):
     if len(p) > 2:
-        p[0] = [p[1]] + p[3]
+        if hasattr(p[3], 'value'):
+            p[1][-1].ids.append(p[3])
+            p[0] = p[1]
+        else:
+            p[1].append(p[3])
+            p[0] = p[1]
     else:
         p[0] = [p[1]]
 
-@G("""modport : ID
-              | input_decl
-              | output_decl
-              | inout_decl""")
-def p_modport(p):
-    p[0] = p[1]
+@G("modport : INPUT range_opt id")
+def p_modport_input(p):
+    p[0] = ast.Input(p[2], [p[3]], True)
+@G("modport : OUTPUT range_opt id")
+def p_modport_output(p):
+    p[0] = ast.Input(p[2], [p[3]], True)
+@G("modport : INOUT range_opt id""")
+def p_modport_inout(p):
+    p[0] = ast.Inout(p[2], [p[3]], True)
 
 @G("input_decl : INPUT range_opt list_of_ids")
 def p_input_decl(p):
@@ -75,8 +73,8 @@ def p_range_opt(p):
 def p_range(p):
     p[0] = ast.Range(p[2], p[4])
 
-@G("""list_of_ids : ID
-                  | ID ',' list_of_ids""")
+@G("""list_of_ids : id
+                  | id ',' list_of_ids""")
 def p_list_of_ids(p):
     if len(p) > 2:
         p[0] = [p[1]] + p[3]
@@ -124,7 +122,7 @@ def p_id_assigns(p):
     else:
         p[0] = [p[1]]
 
-@G("id_assign : ID '=' expression")
+@G("id_assign : id '=' expression")
 def p_id_assign(p):
     p[0] = ast.Assign(p[1], p[2], p[3])
 
@@ -135,16 +133,22 @@ def p_wire_decl(p):
 
 @G("reg_decl : REG range_opt reg_ids")
 def p_reg_decl(p):
-    pass
+    p[0] = ast.Reg(p[2], p[3])
 
 @G("""reg_ids : reg_id ',' reg_ids
               | reg_id""")
 def p_reg_ids(p):
-    pass
+    if len(p) > 2:
+        p[0] = [p[1]] + p[3]
+    else:
+        p[0] = [p[1]];
 
-@G("reg_id : ID range_opt")
+@G("reg_id : id range_opt")
 def p_reg_id(p):
-    pass
+    if p[2]:
+        p[0] = ast.MemReg(p[1], p[2])
+    else:
+        p[0] = p[1]
 
 @G("continous_assign : ASSIGN assigns")
 def p_continous_assign(p):
@@ -167,13 +171,13 @@ def p_assign(p):
     else:
         p[0] = p[1]
 
-@G("""non_blocking_assign : ID '<=' expression
+@G("""non_blocking_assign : id '<=' expression
                           | part_select '<=' expression
                           | concatenation '<=' expression""")
 def p_non_blocking_assign(p):
     p[0] = ast.Assign(p[1], p[2], p[3])
 
-@G("module_instantiation : ID parameter_override_opt instantiations")
+@G("module_instantiation : id parameter_override_opt instantiations")
 def p_module_instantiation(p):
     pass
 
@@ -187,7 +191,7 @@ def p_parameter_override_opt(p):
 def p_connections(p):
     pass
 
-@G("connection : '.' ID '(' expression ')'")
+@G("connection : '.' id '(' expression ')'")
 def p_connection(p):
     pass
 
@@ -196,7 +200,7 @@ def p_connection(p):
 def p_instantiations(p):
     pass
 
-@G("instantiation : ID '(' connections ')'")
+@G("instantiation : id '(' connections ')'")
 def p_instantiation(p):
     pass
 
@@ -222,6 +226,7 @@ def p_statement_sens(p):
                 | non_blocking_assign ';'""")
 def p_statement_assign(p):
     p[0] = p[1]
+    p[0].is_statement = True
 
 @G("""statement : CASE '(' expression ')' case_items ENDCASE
                 | CASEZ '(' expression ')' case_items ENDCASE""")
@@ -249,9 +254,9 @@ def p_sensitivity_list(p):
     else:
         p[0] = [p[1]]
 
-@G("""sensitivity : ID
-                  | POSEDGE ID
-                  | NEGEDGE ID""")
+@G("""sensitivity : id
+                  | POSEDGE id
+                  | NEGEDGE id""")
 def p_sensitivity(p):
     if len(p) == 2:
         p[0] = p[1]
@@ -271,19 +276,21 @@ def p_case_item(p):
 
 @G("""expression : NUMBER
                  | STRING
-                 | ID
                  | binary_op
                  | unary_op
                  | ternary_op
                  | concatenation
                  | repetition
-                 | part_select
-                 | '(' expression ')'""")
+                 | part_select""")
 def p_expression(p):
-    if len(p) > 2:
-        p[0] = p[2]
-    else:
-        p[0] = p[1]
+    p[0] = p[1]
+@G("""expression : '(' expression ')'""")
+def p_expression_paran(p):
+    p[0] = p[2]
+@G("""expression : id""")
+def p_expression_id(p):
+    p[0] = ast.Id(p[1])
+
 
 @G("concatenation : '{' expressions '}'")
 def p_concatenation(p):
@@ -302,9 +309,9 @@ def p_expressions(p):
     else:
         p[0] = [p[1]]
 
-@G("""part_select : ID '[' expression ']'
-                  | ID '[' expression ':' expression ']'
-                  | ID '[' expression '+:' expression ']'""")
+@G("""part_select : id '[' expression ']'
+                  | id '[' expression ':' expression ']'
+                  | id '[' expression '+:' expression ']'""")
 def p_part_select(p):
     pass
 
@@ -373,7 +380,8 @@ if __name__ == "__main__":
     lexer, codes = vLexer()
     parser = ply.yacc.yacc()
     
-    p = preproc("../test/simple.v")
+    import sys
+    p = preproc(sys.argv[1], incpath=("../test/include",))
     print(p)
     r = parser.parse(input=p, lexer=lexer, debug=0)
     for m in r:

@@ -23,7 +23,7 @@ class Module(Ast):
         self.items = items
 
     def __str__(self):
-        ret = "module %s" % (str(self.name),)
+        ret = "module %s" % (self.name.value,)
         if type(self.modports) == list:
             ret += ' (' + ', '.join(str(x) for x in self.modports) + ')'
         ret += ";\n\t"
@@ -32,34 +32,39 @@ class Module(Ast):
         return ret
 
 class Input(Ast):
-    def __init__(self, range_, ids):
+    def __init__(self, range_, ids, in_portlist=False):
         self.range = range_
         self.ids = ids;
-
+        self.in_portlist = in_portlist
     def __str__(self):
         ret = "input "
         if self.range: ret += str(self.range) + " "
-        ret += ',\n\t\t'.join(self.ids) + ";"
+        ret += ',\n\t\t'.join(x.value for x in self.ids)
+        if not self.in_portlist: ret += ";"
         return ret
 class Output(Ast):
-    def __init__(self, range_, ids):
+    def __init__(self, range_, ids, in_portlist=False):
         self.range = range_
         self.ids = ids;
+        self.in_portlist = in_portlist
 
     def __str__(self):
         ret = "output "
         if self.range: ret += str(self.range) + " "
-        ret += ',\n\t\t'.join(self.ids) + ";"
+        ret += ',\n\t\t'.join(x.value for x in self.ids)
+        if not self.in_portlist: ret += ";"
         return ret
 class Inout(Ast):
-    def __init__(self, range_, ids):
+    def __init__(self, range_, ids, in_portlist=False):
         self.range = range_
         self.ids = ids;
+        self.in_portlist = in_portlist
 
     def __str__(self):
         ret = "inout "
         if self.range: ret += str(self.range) + " "
-        ret += ',\n\t\t'.join(self.ids) + ";"
+        ret += ',\n\t\t'.join(self.ids)
+        if not self.in_portlist: ret += ";"
         return ret
 
 class Range(Ast):
@@ -87,7 +92,21 @@ class Wire(Ast):
         self.range = range_
         self.ids_or_assigns = ids_or_assigns;
     def __str__(self):
-        return "wire " + ',\n\t\t'.join(str(x) for x in self.ids_or_assigns) + ";"
+        r = ""
+        if self.range:
+            r = str(self.range) + " "
+        ret = "wire " + r +',\n\t\t'.join(str(x) for x in self.ids_or_assigns) + ";"
+        return ret
+
+class Reg(Ast):
+    def __init__(self, range_, ids_or_mem):
+        self.range = range_
+        self.ids_or_mem = ids_or_mem
+    def __str__(self):
+        r = ""
+        if self.range:
+            r = str(self.range) + " "
+        return "reg " + r + ",\n\t\t".join(x.value for x in self.ids_or_mem) + ";"
 
 class Always(Ast):
     def __init__(self, statement):
@@ -100,18 +119,23 @@ class Edge(Ast):
         self.polarity = polarity
         self.signal = signal
     def __str__(self):
-        return str(self.polarity) + " " + str(self.signal)
+        return str(self.polarity) + " " + self.signal.value
 
 class Statement(Ast):
     pass
 
 class Assign(Statement):
-    def __init__(self, lval, op, rval):
+    def __init__(self, lval, op, rval, is_statement = False):
         self.lval = lval
         self.op = op
         self.rval = rval
+        self.is_statement = is_statement
     def __str__(self):
-        return "%s %s %s" % (str(self.lval), str(self.op), str(self.rval))
+        ret = "%s %s %s" % (self.lval.value, str(self.op), str(self.rval))
+        if self.is_statement:
+            ret += ";"
+        return ret
+        
 class At(Statement):
     def __init__(self, sens, statement):
         self.sens = sens
@@ -139,6 +163,12 @@ class Block(Statement):
 
 class Expression(Ast):
     pass
+
+class Id(Expression):
+    def __init__(self, id_):
+        self.id = id_
+    def __str__(self):
+        return self.id.value
 
 class BinaryOp(Expression):
     def __init__(self, a, op, b):
