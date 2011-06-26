@@ -1,0 +1,50 @@
+metav - Metaprogramming for Verilog
+
+Copyright 2011, 
+Kristoffer Ellersgaard Koch <kristoffer.koch@gmail.com>
+
+    This program is free software: you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see
+    <http://www.gnu.org/licenses/>.
+
+--
+
+metav is a tool for extracting information from Verilog files,
+processing this information, and generating new Verilog code. All this
+within the comfort of expressiove python syntax:
+
+module test(input clk, in_a, in_b, output out_a);
+  /*metav
+  inputs = [i for i in metav.get_inputs() if i.name.startswith('in_')]
+  output, = [o for o in metav.get_outputs()]
+  metav.append(metav.Assign(output, BinaryOp('^', *inputs))
+  */
+  /* Automatically generated code, please edit code above to change: */
+  assign out_a = (in_a ^ in_b);
+  /* End of generated code */
+endmodule
+
+metav is written inline in the verilog source code, not unlike
+javascript and php (which, although many technical objections, are
+hugely successfull). Code emitted is inserted into the file, not
+unlike auto-mode for emacs. This avoids confusion that usually occurs
+in time-constrained teams, when a second designer comes along and
+maybe edits the generated file instead of the generator because:
+
+1) The designer did not realize that this was generated code
+2) or.. The generator where nowhere to be found
+3) or.. The generator was written in layers upon layers of ugly
+        regexes, which the designer did not have the time or will
+        to understand
+
+metav might not change this, but at least it's worth a try.
