@@ -14,13 +14,22 @@ def p_source(p):
 def p_empty(p):
     p[0] = None
 
-@G("module : MODULE id list_of_ports_opt ';' module_items ENDMODULE")
+@G("module : MODULE id module_params_opt list_of_ports_opt ';' module_items ENDMODULE")
 def p_module(p):
-    p[0] = ast.Module(p[2], p[3], p[5])
+    p[0] = ast.Module(p[2], p[3], p[4], p[6])
 
 @G("id : ID")
 def p_id(p):
     p[0] = p.slice[1]
+
+@G("""module_params_opt : empty
+                        | module_params""")
+def p_module_params_opt(p):
+    p[0] = p[1]
+
+@G("module_params : '#' '(' PARAMETER id_assigns ')'")
+def p_module_params(p):
+    p[0] = p[4]
 
 @G("""list_of_ports_opt : empty
                         | '(' list_of_ids ')'
@@ -53,12 +62,17 @@ def p_modports(p):
 @G("modport : INPUT range_opt id")
 def p_modport_input(p):
     p[0] = ast.Input(p[2], [p[3]], True)
-@G("modport : OUTPUT range_opt id")
+@G("modport : OUTPUT reg_opt range_opt id")
 def p_modport_output(p):
-    p[0] = ast.Input(p[2], [p[3]], True)
+    p[0] = ast.Output(p[2], p[3], [p[4]], True)
 @G("modport : INOUT range_opt id""")
 def p_modport_inout(p):
     p[0] = ast.Inout(p[2], [p[3]], True)
+
+@G("""reg_opt : empty
+              | REG""")
+def p_reg_opt(p):
+    p[0] = p[1]
 
 @G("input_decl : INPUT range_opt list_of_ids")
 def p_input_decl(p):
@@ -81,9 +95,9 @@ def p_list_of_ids(p):
     else:
         p[0] = [p[1]]
 
-@G("output_decl : OUTPUT range_opt list_of_ids")
+@G("output_decl : OUTPUT reg_opt range_opt list_of_ids")
 def p_output_decl(p):
-    p[0] = ast.Output(p[2], p[3])
+    p[0] = ast.Output(p[2], p[3], p[4])
 
 @G("inout_decl : INOUT range_opt list_of_ids")
 def p_inout_decl(p):
@@ -109,10 +123,10 @@ def p_module_items(p):
 def p_module_item(p):
     p[0] = p[1]
 
-@G("""parameter_decl : PARAMETER id_assigns
-                     | LOCALPARAM id_assigns""")
+@G("""parameter_decl : PARAMETER range_opt id_assigns
+                     | LOCALPARAM range_opt id_assigns""")
 def p_parameter_decl(p):
-    p[0] = ast.Parameter(p[1], p[2])
+    p[0] = ast.Parameter(p[1], p[2], p[3])
 
 @G("""id_assigns : id_assign
                  | id_assign ',' id_assigns""")

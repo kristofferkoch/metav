@@ -121,9 +121,11 @@ def vLexer():
 
     prev_decl = None
     block_comment = None
+    prev_id = None
+    cur_module = None
     @TOKEN(r'(\\\S+)|([a-zA-Z_]\w*)')
     def t_ID(t):
-        nonlocal prev_decl, block_comment
+        nonlocal prev_decl, block_comment, prev_id, cur_module
         if t.value[0] == '\\':
             t.value = t.value[1:]
         t.type = keyword_map.get(t.value, 'ID')
@@ -135,6 +137,11 @@ def vLexer():
                 prev_decl = t
             t.block_comment = block_comment
             block_comment = None
+            if prev_id.type == 'MODULE':
+                cur_module = t.value
+        if t.type == 'ENDMODULE':
+            cur_module = None
+        prev_id = t
         return t
 
     @TOKEN(r'([0-9]*\'([bB](?P<bin>[01_zxZX?]+)|[hH][0-9a-fA-F_zxZX?]+|[dD][0-9_])|[0-9]+)')
@@ -169,10 +176,10 @@ def vLexer():
             if p.type == 'file': return p
         assert False
 
-    codes = []
+    codes = {}
     @TOKEN(r'/\*+\s*metav[\s\*]*?\n+(?P<white>[\t ]*)(?P<code>(.|\n)*?)\s*\*/')
     def t_METAV(t):
-        nonlocal codes
+        nonlocal codes, cur_module
         white_prefix = t.lexer.lexmatch.group('white')
         code = white_prefix + t.lexer.lexmatch.group('code')
         lines = []
@@ -182,13 +189,16 @@ def vLexer():
                 raise Exception("python code with unclean white prefix")
             lines.append(line[len(white_prefix):])
         code = '\n'.join(lines)
-        #print("Got code block:\n"+code+"\n#endcode")
+        print("Got code block in "+cur_module+":\n"+code+"\n#endcode")
         filepos = _get_file()
         past = ast.parse(code, filepos.value)
         ast.increment_lineno(past, filepos.line)
-        code = compile(past, filename=filepos.value, mode="exec")
-        codes.append(code)
+        code = compile(past, filename=filepos.value, mode='exec')
+        if cur_module not in codes:
+            codes[cur_module] = []
+        codes[cur_module].append(code)
         return None
+
     @TOKEN(r'/\*metav\ generated:\*/(.|\n)*?/\*end\ metav\ generated\*/')
     def t_METAV_GENERATED(t):
         #print("Got generated code. Ignoring");
@@ -230,7 +240,8 @@ if __name__ == "__main__":
     tokens = list(l)
     for tok in tokens:
         print(repr(tok))
-    for code in codes:    
+    for module in codes:
         #print(ast.dump(code, include_attributes=True))
         #print(dir(code))
-        exec(code)
+        for code in codes[module]:
+            exec(code)
