@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
+import literal
 from collections import defaultdict
 
 class Ast(object):
@@ -214,6 +215,33 @@ class Edge(Ast):
     def __str__(self):
         return str(self.polarity) + " " + self.signal.value
 
+class ModuleInsts(Ast):
+    def __init__(self, module_name, param_overrides, insts):
+        self.module_name = module_name
+        self.param_overrides = param_overrides
+        self.insts = insts
+    def __str__(self):
+        ret = self.module_name.value + " "
+        if self.param_overrides:
+            ret += "#(" + ',\n\t\t\t'.join(str(x) for x in self.param_overrides) + ")\n\t\t"
+        ret += ', '.join(str(x) for x in self.insts)
+        ret += ";"
+        return ret
+
+class ModuleInst(Ast):
+    def __init__(self, inst_name, connections):
+        self.inst_name = inst_name
+        self.connections = connections
+    def __str__(self):
+        return self.inst_name.value + ' (' + ',\n\t\t\t'.join(str(x) for x in self.connections) + ")"
+
+class Connection(Ast):
+    def __init__(self, id_, expr):
+        self.id = id_
+        self.expr = expr
+    def __str__(self):
+        return "."+self.id.value+'('+str(self.expr)+')'
+
 class Statement(Ast):
     pass
 
@@ -263,6 +291,36 @@ class Id(Expression):
     def __str__(self):
         return self.id.value
 
+class PartSelect(Expression):
+    def __init__(self, **kwargs):
+        self.type = kwargs['type']
+        self.id = kwargs['id']
+        if self.type == "single":
+            self.expr = kwargs["expr"]
+            self.msb = self.expr
+            self.lsb = self.expr
+            self.size = literal.VerilogNumber("1")
+        elif self.type == "range":
+            self.msb = kwargs["msb"]
+            self.lsb = kwargs["lsb"]
+            self.size = BinaryOp(self.msb,'-',self.lsb)
+        elif self.type == "plus":
+            self.lsb = kwargs["lsb"]
+            self.size = kwargs["size"]
+            self.msb = BinaryOp(self.lsb,'+',self.size)
+        else:
+            assert False
+    def __str__(self):
+        ret = self.id.value + "["
+        if self.type == "single":
+            ret += str(self.expr)
+        elif self.type == "range":
+            ret += str(self.msb)+":"+str(self.lsb)
+        elif self.type == "plus":
+            ret += str(self.lsb)+"+:"+str(self.size)
+        ret += "]"
+        return ret
+
 class BinaryOp(Expression):
     def __init__(self, a, op, b):
         self.a = a
@@ -298,3 +356,4 @@ class Concatenation(Expression):
         self.expressions = expressions
     def __str__(self):
         return '{' + ', '.join(str(x) for x in self.expressions) + '}'
+

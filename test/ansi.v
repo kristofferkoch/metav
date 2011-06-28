@@ -1,8 +1,6 @@
 // ASCII a stupid question, get a stupid ANSI:
 module ansi(input clk, rst_n, d_in,
-	    output d_out);
-   
-   reg 		   d_out;
+	    output reg d_out);
    
    always @(posedge clk or negedge rst_n)
      if (!rst_n)

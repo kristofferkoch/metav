@@ -193,36 +193,45 @@ def p_non_blocking_assign(p):
 
 @G("module_instantiation : id parameter_override_opt instantiations")
 def p_module_instantiation(p):
-    pass
+    p[0] = ast.ModuleInsts(p[1], p[2], p[3])
 
 @G("""parameter_override_opt : empty
                              | '#' '(' connections ')'""")
 def p_parameter_override_opt(p):
-    pass
+    if len(p) > 2:
+        p[0] = p[3]
 
 @G("""connections : connection ',' connections
                   | connection""")
 def p_connections(p):
-    pass
+    if len(p) > 2:
+        p[3].insert(0, p[1])
+        p[0] = p[3]
+    else:
+        p[0] = [p[1]]
 
 @G("connection : '.' id '(' expression ')'")
 def p_connection(p):
-    pass
+    p[0] = ast.Connection(p[2], p[4])
 
 @G("""instantiations : instantiation ',' instantiations
                      | instantiation""")
 def p_instantiations(p):
-    pass
+    if len(p) > 2:
+        p[3].insert(0, p[1])
+        p[0] = p[3]
+    else:
+        p[0] = [p[1]]
 
 @G("instantiation : id '(' connections ')'")
 def p_instantiation(p):
-    pass
+    p[0] = ast.ModuleInst(p[1], p[3])
 
 @G("always_block : ALWAYS statement")
 def p_always_block(p):
     p[0] = ast.Always(p[2])
 
-@G("statement : BEGIN statements END")
+@G("statement : BEGIN block_name_opt statements END")
 def p_statement_block(p):
     p[0] = ast.Block(p[2])
 @G("""statement : IF '(' expression ')' statement_opt %prec LOWER_THAN_ELSE
@@ -258,6 +267,15 @@ def p_statements(p):
 @G("""statement_opt : statement
                     | ';'""")
 def p_statement_opt(p):
+    p[0] = p[1]
+
+@G("""block_name_opt : empty
+                     | block_name""")
+def p_block_name_opt(p):
+    p[0] = p[1]
+
+@G("block_name : ':' id")
+def p_block_name(p):
     p[0] = p[1]
 
 @G("""sensitivity_list : sensitivity OR sensitivity_list
@@ -323,11 +341,15 @@ def p_expressions(p):
     else:
         p[0] = [p[1]]
 
-@G("""part_select : id '[' expression ']'
-                  | id '[' expression ':' expression ']'
-                  | id '[' expression '+:' expression ']'""")
-def p_part_select(p):
-    pass
+@G("part_select : id '[' expression ']'")
+def p_part_select_single(p):
+    p[0] = ast.PartSelect(type="single", id=p[1], expr=p[3])
+@G("part_select : id '[' expression ':' expression ']'")
+def p_part_select_range(p):
+    p[0] = ast.PartSelect(type="range", id=p[1], msb=p[3], lsb=p[5])
+@G("part_select : id '[' expression '+:' expression ']'")
+def p_part_select_plus(p):
+    p[0] = ast.PartSelect(type="plus", id=p[1], lsb=p[3], size=p[5])
 
 precedence = (
     ('nonassoc', 'LOWER_THAN_ELSE'),
