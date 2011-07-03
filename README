@@ -49,3 +49,11 @@ maybe edits the generated file instead of the generator because:
         to understand
 
 metav might not change this, but at least it's worth a try.
+
+--
+
+metav currently relies on my forked version of ply to work. I hope to
+get the required patches upstream, and/or be backwards compatible with
+the upstream ply. Please see my ply tree in github for details:
+<https://github.com/kristofferkoch/ply>
+
