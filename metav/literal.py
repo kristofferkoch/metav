@@ -14,7 +14,7 @@
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
-from vast import Expression
+from vast import Expression, _get_end
 
 UNSIZED = re.compile(r'^[0-9]+$')
 BIN     = re.compile(r'^(?P<size>[0-9]*)\'[bB](?P<bin>[01_zxZX?]+)$')
@@ -23,6 +23,11 @@ HEX     = re.compile(r'^(?P<size>[0-9]*)\'[hH](?P<hex>[0-9a-fA-FzxZX?_]+)$')
 
 class VerilogNumber(Expression):
     def __init__(self, string):
+        if type(string) == str:
+            self.pos = ((),())
+        else:
+            self.pos = (string.pos_stack, _get_end(string))
+            string = string.value
         self.orig = string
         unz = UNSIZED.match(string)
         if unz:
@@ -102,3 +107,14 @@ class VerilogNumber(Expression):
         return self.value
     def __len__(self):
         return self.size
+
+class String(VerilogNumber):
+    def __init__(self, string):
+        self.pos = (string.pos_stack, _get_end(string))
+        string = string.value
+        self.value = 0 # TODO
+        self.xmask = 0
+        self.zmask = 0
+        self.size = len(string)*8
+        self.orig = string
+

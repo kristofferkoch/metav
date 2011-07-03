@@ -16,17 +16,8 @@
 import re
 import ply.lex
 import copy
-from literal import VerilogNumber
+from literal import VerilogNumber, String
 import ast
-
-class Position(object):
-    def __init__(self, type_, value):
-        self.type = type_
-        self.value = value
-    def __repr__(self):
-        if hasattr(self, 'line'):
-            return "(%s,%s,%d,%d)" % (self.type, self.value, self.line, self.pos)
-        return "(%s,%s)" % (self.type, self.value)
 
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',
             'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ', 'ENDCASE',
@@ -48,11 +39,12 @@ tokens = keywords + \
     )
 
 def vLexer():
-    linepos = 0
+    ## tuple of tuples:
+    # (postype, posvalue, pos, line, linepos)
+    # ('file', 'test.v', 0, 1, 0)
+    pos_stack = (('void', None, 0, 1, 0),)
+    lex_offset = 0
     
-    pos_stack = []
-    lexpos_ref = None
-
     def build_symbolre(symbols=symbols):
         single = ''
         rest = []
@@ -70,11 +62,24 @@ def vLexer():
     def TOKEN(r):
         def set_doc(f):
             def new_f(t):
-                nonlocal lexpos_ref, pos_stack
-                if lexpos_ref != None:
-                    pos_stack[-1].pos = lexpos_ref[1] + (t.lexer.lexpos - lexpos_ref[0])
-                t.pos_stack = copy.deepcopy(pos_stack)
-                return f(t)
+                nonlocal pos_stack, lex_offset
+                # Do book-keeping to correct the positions
+                l = pos_stack[-1]
+                diff = t.lexpos - l[2] - lex_offset
+                #assert diff >= 0, "diff=%d, should be >= 0" % diff
+                if diff > 0:
+                    pos_stack = pos_stack[:-1] + ((l[0], l[1], l[2]+diff, l[3], l[4]+diff),)
+                    #print("diff: " + repr(pos_stack))
+                t.pos_stack = pos_stack[1:]
+                ret = f(t)
+                # Count linenumbers
+                v = str(t.value)
+                if '\n' in v:
+                    l = pos_stack[-1]
+                    lineno = l[3] + v.count('\n')
+                    pos = len(v) - v.rindex('\n') - 2
+                    pos_stack = pos_stack[:-1] + ((l[0], l[1], l[2], lineno, pos),)
+                return ret
             new_f.regex = r
             new_f.__doc__ = f.__doc__
             new_f.lineno   = f.__code__.co_firstlineno
@@ -84,39 +89,40 @@ def vLexer():
 
     @TOKEN(r'`(?P<type>[a-z_0-9]+)\((?P<value>[^)]*)\)')
     def t_ANCHOR(t):
-        nonlocal pos_stack, lexpos_ref
+        nonlocal pos_stack, lex_offset
         type_ = t.lexer.lexmatch.group('type')
         value = t.lexer.lexmatch.group('value')
+        l = pos_stack[-1]
+        #print("in ANCHOR " + repr(pos_stack), type_,value)
         if type_ == "pos":
             line, pos = (int(x) for x in value.split(","))
             t.lexer.lineno = line
-            pos_stack[-1].line = line
-            pos_stack[-1].pos  = pos
-            lexpos_ref = t.lexer.lexpos, pos
+            assert line >= l[3]
+            if line > l[3]:
+                pos_stack = pos_stack[:-1] + ((l[0], l[1], l[2], line, l[4]),)
+            lex_offset = pos - t.lexpos
         elif type_ == "file":
-            pos = Position('file',value)
-            pos.line = 1;
-            pos.pos = 0;
-            pos_stack.append(pos)
-            #print("Current file is %s" % value)
+            pos_stack += (('file', value, 0, 1, 0),)
         elif type_ == "endfile":
-            pos = pos_stack.pop()
-            assert pos.type == "file"
-            assert pos.value == value
+            assert l[0] == "file"
+            assert l[1] == value
+            pos_stack = pos_stack[:-1]
             if pos_stack:
-                assert pos_stack[-1].type == "file" # Cannot `include with a macro
+                assert pos_stack[-1][0] in ("file", "void"), "endfile was %s" % repr(pos_stack[-1]) # Cannot `include with a macro
                 #print("Back to file %s" % pos_stack[-1].value)
         elif type_ == "macro":
-            pos_stack.append(Position('macro', value))
+            pos_stack += (('macro', value, 0, 1, 0),)
             #print("Entering macro %s" % value)
         elif type_ == "endmacro":
-            pos = pos_stack.pop()
-            assert pos.type == "macro"
-            assert pos.value == value
+            pos_stack = pos_stack[:-1]
+            assert l[0] == "macro"
+            assert l[1] == value
             #print("Leaving macro %s" % value)
         else:
-            print("Unknown anchor ",type_)
-            assert False 
+            assert False, "Unknown anchor %s" % type_
+        #assert lex_offset >= 0, "lex_offset=%d, should be >= 0" % lex_offset
+        lex_offset += len(t.value)
+        #print("Return ANCHOR", pos_stack)
         return None
 
     prev_decl = None
@@ -146,10 +152,13 @@ def vLexer():
 
     @TOKEN(r'([0-9]*\'([bB](?P<bin>[01_zxZX?]+)|[hH][0-9a-fA-F_zxZX?]+|[dD][0-9_])|[0-9]+)')
     def t_NUMBER(t):
-        t.value = VerilogNumber(t.value)
+        nonlocal pos_stack
+        t.value = VerilogNumber(t)
+        #t.value.pos_stack = pos_stack[1:]
         return t
     @TOKEN(r'"(\\"|[^"])*"')
     def t_STRING(t):
+        t.value = String(t)
         return t
 
     def annotate_comment(t):
@@ -173,7 +182,7 @@ def vLexer():
     def _get_file():
         nonlocal pos_stack
         for p in reversed(pos_stack):
-            if p.type == 'file': return p
+            if p[0] == 'file': return p
         assert False
 
     codes = {}
@@ -189,11 +198,11 @@ def vLexer():
                 raise Exception("python code with unclean white prefix")
             lines.append(line[len(white_prefix):])
         code = '\n'.join(lines)
-        print("Got code block in "+cur_module+":\n"+code+"\n#endcode")
+        #print("Got code block in "+cur_module+":\n"+code+"\n#endcode")
         filepos = _get_file()
-        past = ast.parse(code, filepos.value)
-        ast.increment_lineno(past, filepos.line)
-        code = compile(past, filename=filepos.value, mode='exec')
+        past = ast.parse(code, filepos[1])
+        ast.increment_lineno(past, filepos[3])
+        code = compile(past, filename=filepos[1], mode='exec')
         if cur_module not in codes:
             codes[cur_module] = []
         codes[cur_module].append(code)
@@ -206,9 +215,6 @@ def vLexer():
 
     @TOKEN(r'/\*(.|\n)*?\*/')
     def t_BLOCK_COMMENT(t):
-        if '\n' in t.value:
-            linepos = t.lexpos + t.value.rindex('\n') + 1
-            t.lexer.lineno += t.value.count('\n')
         #print("Got block comment: "+t.value + "end: "+str(linepos))
         annotate_comment(t)
 
@@ -218,15 +224,17 @@ def vLexer():
             t.type = "'"+t.value+"'"
         return t
 
-    t_ignore = ' \t\r'
+    #t_ignore = ''
     @TOKEN(r'\n+')
     def t_newline(t):
-        nonlocal pos_stack, prev_decl
+        nonlocal prev_decl
         n = len(t.value)
-        pos_stack[-1].line += n
-        linepos = t.lexpos + n
         t.lexer.lineno += n
         prev_decl = None
+        
+    @TOKEN(r'[ \t\r]+')
+    def t_white(t):
+        return None
 
     def t_error(t):
         print("Lexer error");

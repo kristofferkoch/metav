@@ -4,7 +4,7 @@
 `define Z 76 /* multi
 	      line*/
 
-module test(/*AUTOARG*/
+module preproc(/*AUTOARG*/
    // Outputs
    out,
    // Inputs
@@ -16,10 +16,15 @@ module test(/*AUTOARG*/
    // Here comes a def:
    input x; // this is a def
    output `X out;
-   input  clk, rst_n;
+   /*metav_delete:input  clk, rst_n;:metav_delete*/
    
    reg 	  [8*80:0] stringreg;
    always @*
      stringreg = "hello, world /*";
-   
-endmodule // test
+   /*metav
+    print(module)
+    */
+   /*metav_generated:*/
+   wire 	   should_be_removed;
+   /*:metav_generated*/
+endmodule

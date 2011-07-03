@@ -36,8 +36,14 @@ def _define(m, path, defines):
     defines[macro] = value
     return ""
 
+def _drop(m, path, defines):
+    return ""
+
 regexs = (
     (r'//[^\n]*',       None),
+    (r'/\*metav_delete:', _drop),
+    (r':metav_delete\*/', _drop),
+    (r'/\*metav_generated:\*/(.|\n)*?/\*:metav_generated\*/', _drop),
     (r'/\*(.|\n)*?\*/', None),
     (r'"(\\"|[^"])*"', None),
     (r'`include\s+"([^"]+)"', _include),
