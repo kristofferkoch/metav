@@ -88,7 +88,10 @@ def p_modport_inout(p):
 @G("""reg_opt : empty
               | REG""")
 def p_reg_opt(p):
-    p[0] = p[1]
+    if p[1]:
+        p[0] = p.slice[1]
+    else:
+        p[0] = None
 
 @G("input_decl : INPUT range_opt list_of_ids")
 def p_input_decl(p):

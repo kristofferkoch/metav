@@ -14,7 +14,6 @@
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
 import literal
-from collections import defaultdict
 
 def _get_end(i):
     l = i.pos_stack[-1]
@@ -28,69 +27,87 @@ class Ast(object):
 class Module(Ast):
     def __init__(self, module, name, modparams, modports, items, endmodule):
         self.pos = (module.pos_stack, _get_end(endmodule))
+        assert isinstance(name, Id)
         self.name = name
+        assert modparams == None or isinstance(modparams[0], Parameter)
         self.modparams = modparams
+        assert modports == None or len(modports) == 0 or \
+            isinstance(modports[0], Port) or isinstance(modport[0], Id)
         self.modports = modports
+        assert len(items) == 0 or isinstance(items[0], Ast)
         self.items = items
 
-        self.ids = defaultdict(set)
+        self.ids = {}
         if modparams:
             for p in modparams:
                 assert isinstance(p, Parameter)
+                p.parent = self
                 for assign in p.assigns:
                     assert isinstance(assign, Assign)
                     assert isinstance(assign.lval, Id)
-                    self.ids[assign.lval.value] = self.Decl(p, assign)
+                    self.ids.setdefault(assign.lval.value, set()).add(self.Decl(p, assign))
         if modports and hasattr(modports[0], 'ids'):
             for p in modports:
-                assert type(p) in PORTTYPES
-                for id in p.ids:
-                    self.ids[id.value].add(self.Decl(p, id))
+                assert isinstance(p, Port)
+                p.parent = self
+                for id_ in p.ids:
+                    assert isinstance(id_, Id)
+                    self.ids.setdefault(id_.value, set()).add(self.Decl(p, id_))
                 
         for i in items:
+            assert isinstance(i, Ast)
             i.parent = self
-            if hasattr(i, 'ids'):
-                ids = i.ids
-            elif hasattr(i, 'ids_or_mem'):
-                ids = i.ids_or_mem
-            elif type(i) == Wire:
-                ids = i.ids_or_assigns
-            elif type(i) == Parameter:
-                ids = i.assigns
-            else: continue
+            if hasattr(i, 'ids'):          ids = i.ids
+            elif hasattr(i, 'ids_or_mem'): ids = i.ids_or_mem
+            elif type(i) == Wire:          ids = i.ids_or_assigns
+            elif type(i) == Parameter:     ids = i.assigns
+            else:                          continue
             for id_or_assign in ids:
                 if type(id_or_assign) == Assign:
-                    self.ids[id_or_assign.lval.value].add(self.Decl(i, id_or_assign))
+                    self.ids.setdefault(id_or_assign.lval.value, set()).add(self.Decl(i, id_or_assign))
                 else:
-                    self.ids[id_or_assign.value].add(self.Decl(i, id_or_assign))
+                    self.ids.setdefault(id_or_assign.value, set()).add(self.Decl(i, id_or_assign))
+
+        self._extract_output_reg()
 
         self.insts = dict((i.module_name.value, i) for i in self.items if type(i) == ModuleInsts)
         print("module " + self.name.value)
         for id in self.ids:
             print(id+":\t"+repr(self.ids[id]))
         self.to_add = []
-                
+
+    def _extract_output_reg(self):
+        # Some output declarations have "reg" as well
+        # Add this as an explicit reg declaration for normalization purposes
+        for id_ in self.ids:
+            to_add = set()
+            for decl in self.ids[id_]:
+                if decl.type != 'port' or decl.subtype != 'output': continue
+                o = decl.ast
+                assert decl.id.value == id_
+                if o.is_reg:
+                    regdecl = self.Decl(Reg(o.reg_kw, o.range, [decl.id], decl.id), decl.id)
+                    to_add.add(regdecl)
+            self.ids[id_].update(to_add)
+        
     class Decl(object):
-        def __init__(self, ast, id):
+        def __init__(self, ast, id_):
             self.ast = ast
-            if type(ast) == Input:    self.type = "input"
-            elif type(ast) == Output:
-                self.type = "output"
-                if ast.is_reg:
-                    self.subtype = "output reg"
-            elif type(ast) == Inout:  self.type = "inout"
+            if isinstance(ast, Port):
+                self.type = "port"
+                self.subtype = ast.type
             elif type(ast) == Parameter:
                 self.type = "parameter"
                 self.subtype = ast.type
             elif type(ast) == Reg:
                 self.type = "reg"
-                self.subtype = "mem" if type(id) == MemReg else "reg"
+                self.subtype = "mem" if type(id_) == MemReg else "reg"
             elif type(ast) == Wire:
                 self.type = 'wire'
             else:
                 print(str(ast))
                 assert(False)
-            self.id = id
+            self.id = id_
             self.range = ast.range
         def __str__(self):
             r = ''
@@ -102,7 +119,7 @@ class Module(Ast):
                 if type(x) == Assign: return x.lval.value + ' = ' + str(x.rval)
                 return x.value
             return '<' + t + ' ' + r + s(self.id)+'>'
-        def __repr__(self): return str(self)
+        def __repr__(self): return "Module.Decl("+str(self)+")"
         
     def __str__(self):
         def mystr(x):
@@ -148,10 +165,10 @@ class Input(Port):
 class Output(Port):
     def __init__(self, kw, reg, range_, ids, last, in_portlist=False):
         Port.__init__(self, kw, range_, ids, last, in_portlist)
-        self.is_reg = bool(reg)
+        self.reg_kw = reg
+        self.is_reg = bool(reg.value)
 class Inout(Port):
     pass
-PORTTYPES = (Input, Output, Inout)
 
 class Range(Ast):
     def __init__(self, left, msb, lsb, right):
