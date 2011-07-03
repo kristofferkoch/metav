@@ -21,17 +21,18 @@ Kristoffer Ellersgaard Koch <kristoffer.koch@gmail.com>
 
 metav is a tool for extracting information from Verilog files,
 processing this information, and generating new Verilog code. All this
-within the comfort of expressiove python syntax:
+within the comfort of expressive python syntax:
 
 module test(input clk, in_a, in_b, output out_a);
   /*metav
-  inputs = [i for i in metav.get_inputs() if i.name.startswith('in_')]
-  output, = [o for o in metav.get_outputs()]
-  metav.append(metav.Assign(output, BinaryOp('^', *inputs))
+  inputs = [i for i in module.get_inputs() if i.name.startswith('in_')]
+  output, = [o for o in module.get_outputs()]
+  module.append(ast.Assign(output, ast.BinaryOp('^', *inputs))
   */
-  /* Automatically generated code, please edit code above to change: */
+  /*metav generated:*/
   assign out_a = (in_a ^ in_b);
-  /* End of generated code */
+  /*end metav generated*/
+
 endmodule
 
 metav is written inline in the verilog source code, not unlike

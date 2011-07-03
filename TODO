@@ -1,0 +1,12 @@
+
+* Make a nice python package/module
+
+* Write emacs metav multi-mode to highlight both the Verilog and the
+   Python code
+
+* Add support for generating code "in line"
+
+* Add support for deleting code "in line"
+
+* Make a regression testing framework
+
