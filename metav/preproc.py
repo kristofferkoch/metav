@@ -15,20 +15,23 @@
 
 import re,os.path
 
-def _include(m, incpath, defines):
+def _include(m, incpath, defines, state):
+    if not state['ifdef']: return ""
     filename = m.group(1)
     for p in incpath:
         p = os.path.join(p, filename)
         if os.path.isfile(p):
-            return preproc(p, incpath, defines)
+            return preproc(p, incpath, defines, state)
     raise IOError("Could not find %s in include path" % (filename, ))
 
-def _macro(m, path, defines):
+def _macro(m, path, defines, state):
+    if not state['ifdef']: return ""
     macro = m.group(1)
     #print("macro: "+macro)
-    return "`macro(%s)%s`endmacro(%s)" % (macro, _process(defines[macro], path, defines), macro)
+    return "`macro(%s)%s`endmacro(%s)" % (macro, _process(defines[macro], path, defines, state), macro)
 
-def _define(m, path, defines):
+def _define(m, path, defines, state):
+    if not state['ifdef']: return ""
     macro = m.group(1)
     value = m.group(2)
     #print("define "+macro+"="+value)
@@ -36,7 +39,24 @@ def _define(m, path, defines):
     defines[macro] = value
     return ""
 
-def _drop(m, path, defines):
+def _drop(m, path, defines, state):
+    return ""
+
+def _ifdef(m, path, defines, state):
+    var = m.group(1)
+    if var not in defines:
+        state['ifdef'] = False
+    return ""
+def _ifndef(m, path, defines, state):
+    var = m.group(1)
+    if var in defines:
+        state['ifdef'] = False
+    return ""
+def _else(m, path, defines, state):
+    state['ifdef'] = not state['ifdef']
+    return ""
+def _endif(m, path, defines, state):
+    state['ifdef'] = True
     return ""
 
 regexs = (
@@ -47,21 +67,26 @@ regexs = (
     (r'/\*(.|\n)*?\*/', None),
     (r'"(\\"|[^"])*"', None),
     (r'`include\s+"([^"]+)"', _include),
+    (r'`ifdef\s+(\S+)', _ifdef),
+    (r'`ifndef\s+(\S+)', _ifndef),
+    (r'`else', _else),
+    (r'`endif', _endif),
     (r'`define\s+([A-Za-z0-9_]+)\s+(.*?)(?=\n|//|/\*)', _define),
     (r'`([A-Za-z_0-9]+)', _macro)
     )
 
 regexs = [(re.compile(r), a) for (r, a) in regexs]
 
-def preproc(filename, incpath = ('.',), defines = {}):
+def preproc(filename, incpath = ('.',), defines = {}, state = {'ifdef': True}):
     cont = open(filename).read()
     return "`file(%s)" % filename + \
-        _process(cont, incpath, defines) +\
+        _process(cont, incpath, defines, state) +\
         "`endfile(%s)" % filename
     
-def _process(cont, path, defines):
+def _process(cont, path, defines, state):
     lineno = 1;
     char = 0;
+    skipped = 0
     ret = ""
     while cont:
         for (regex, action) in regexs:
@@ -71,23 +96,35 @@ def _process(cont, path, defines):
                 assert end > 0
                 char += end
                 if action:
-                    gen = action(m, path, defines)
+                    gen = action(m, path, defines, state)
                     lineno += m.group(0).count('\n')
-                    ret += gen
-                    if len(gen) != end:
-                        ret += "`pos(%d,%d)" % (lineno, char)
                 else:
                     matched = m.group(0)
                     lineno += matched.count('\n')
-                    ret += matched
+                    if state['ifdef']: gen = matched
+                    else:              gen = ""
+                if skipped > 0 and len(gen) > 0:
+                    ret += "`pos(%d,%d)" % (lineno, char)
+                    skipped = 0;
+                ret += gen
+                if len(gen) < end:
+                    skipped += end - len(gen)
+                elif len(gen) > end:
+                    ret += "`pos(%d,%d)" % (lineno, char)
                 cont = cont[end:]
                 break
         else:
+            if state['ifdef']:
+                if skipped > 0:
+                    ret += "`pos(%d,%d)" % (lineno, char)
+                    skipped = 0;
+                ret += cont[0]
+            else:
+                skipped += 1
             if cont[0] == '\n':
                 lineno += 1;
-            ret += cont[0]
-            cont = cont[1:]
             char += 1;
+            cont = cont[1:]
     return ret
 
 if __name__ == "__main__":

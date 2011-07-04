@@ -27,4 +27,9 @@ module preproc(/*AUTOARG*/
    /*metav_generated:*/
    wire 	   should_be_removed;
    /*:metav_generated*/
+`ifdef NOT_DEF
+   syntax_error;
+`else
+   assign foo = bar;
+`endif
 endmodule

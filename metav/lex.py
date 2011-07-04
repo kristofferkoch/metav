@@ -97,7 +97,6 @@ def vLexer():
         if type_ == "pos":
             line, pos = (int(x) for x in value.split(","))
             t.lexer.lineno = line
-            assert line >= l[3]
             if line > l[3]:
                 pos_stack = pos_stack[:-1] + ((l[0], l[1], l[2], line, l[4]),)
             lex_offset = pos - t.lexpos

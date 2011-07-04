@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 # This file is part of metav.
 
 # metav is free software: you can redistribute it and/or modify it
@@ -35,6 +36,7 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
     parser = vParser()
     filename = _find_file(top, modpath=modpath)
     p = preproc(filename, incpath=incpath)
+    print(p)
     modules = parser.parse(input=p, lexer=lexer, debug=debug)
     for module in modules:
         module_dict[module.name.value] = module

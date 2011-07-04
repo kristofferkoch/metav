@@ -32,7 +32,7 @@ class Module(Ast):
         assert modparams == None or isinstance(modparams[0], Parameter)
         self.modparams = modparams
         assert modports == None or len(modports) == 0 or \
-            isinstance(modports[0], Port) or isinstance(modport[0], Id)
+            isinstance(modports[0], Port) or isinstance(modports[0], Id)
         self.modports = modports
         assert len(items) == 0 or isinstance(items[0], Ast)
         self.items = items
@@ -171,7 +171,7 @@ class Output(Port):
     def __init__(self, kw, reg, range_, ids, last, in_portlist=False):
         Port.__init__(self, kw, range_, ids, last, in_portlist)
         self.reg_kw = reg
-        self.is_reg = bool(reg.value)
+        self.is_reg = hasattr(reg, 'value') and bool(reg.value)
 class Inout(Port):
     pass
 
