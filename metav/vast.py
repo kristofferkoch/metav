@@ -45,7 +45,8 @@ class Module(Ast):
                 for assign in p.assigns:
                     assert isinstance(assign, Assign)
                     assert isinstance(assign.lval, Id)
-                    self.ids.setdefault(assign.lval.value, set()).add(self.Decl(p, assign))
+                    self.ids.setdefault(assign.lval.value, set()).add(
+                        self.Decl(p, assign))
         if modports and hasattr(modports[0], 'ids'):
             for p in modports:
                 assert isinstance(p, Port)
@@ -64,13 +65,16 @@ class Module(Ast):
             else:                          continue
             for id_or_assign in ids:
                 if type(id_or_assign) == Assign:
-                    self.ids.setdefault(id_or_assign.lval.value, set()).add(self.Decl(i, id_or_assign))
+                    self.ids.setdefault(id_or_assign.lval.value, set()).add(
+                        self.Decl(i, id_or_assign))
                 else:
-                    self.ids.setdefault(id_or_assign.value, set()).add(self.Decl(i, id_or_assign))
+                    self.ids.setdefault(id_or_assign.value, set()).add(
+                        self.Decl(i, id_or_assign))
 
         self._extract_output_reg()
 
-        self.insts = dict((i.module_name.value, i) for i in self.items if type(i) == ModuleInsts)
+        self.insts = dict((i.module_name.value, i) for i in self.items
+                          if type(i) == ModuleInsts)
         print("module " + self.name.value)
         for id in self.ids:
             print(id+":\t"+repr(self.ids[id]))
@@ -86,7 +90,8 @@ class Module(Ast):
                 o = decl.ast
                 assert decl.id.value == id_
                 if o.is_reg:
-                    regdecl = self.Decl(Reg(o.reg_kw, o.range, [decl.id], decl.id), decl.id)
+                    regdecl = self.Decl(Reg(o.reg_kw, o.range, [decl.id], decl.id),
+                                        decl.id)
                     to_add.add(regdecl)
             self.ids[id_].update(to_add)
         
@@ -304,6 +309,43 @@ class Connection(Ast):
 
 class Statement(Ast):
     pass
+
+class Case(Statement):
+    def __init__(self, kw, expr, items, end):
+        self.pos = (kw.pos_stack, end.pos_stack)
+        self.type = kw.value
+        self.expr = expr
+        self.items = items
+    def __str__(self):
+        ret = self.type+"(%s)\n\t\t" % str(self.expr)
+        ret += '\n\t\t'.join(str(x) for x in self.items)
+        ret += "\n\tendcase"
+        return ret
+
+class CaseItem(Ast):
+    def __init__(self, expressions, statement):
+        if type(expressions) in (list, tuple):
+            pos0 = expressions[0].pos[0]
+            self.expressions = expressions
+        else:
+            pos0 = expressions.pos_stack
+            self.expressions = None
+        if isinstance(statement, Statement):
+            self.statement = statement
+            self.pos = (pos0, statement.pos[1])
+        else:
+            self.statement = None
+            self.pos = (pos0, statement.pos_stack)
+    def __str__(self):
+        if self.expressions:
+            ret = ', '.join(str(x) for x in self.expressions) + " : "
+        else:
+            ret = 'default : '
+        if self.statement:
+            ret += str(self.statement)
+        else:
+            ret += ";"
+        return ret
 
 class Assign(Statement):
     def __init__(self, lval, op, rval, is_statement = False):

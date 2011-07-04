@@ -202,7 +202,7 @@ def p_assigns(p):
              | concatenation '=' expression""")
 def p_assign(p):
     if len(p) > 2:
-        raise NotImplementedError
+        p[0] = ast.Assign(p[1], p[2], p[3])
     else:
         p[0] = p[1]
 
@@ -271,11 +271,12 @@ def p_statement_sens(p):
 def p_statement_assign(p):
     p[0] = p[1]
     p[0].is_statement = True
+    p[0].extend_pos(p.slice[2].pos_stack)
 
 @G("""statement : CASE '(' expression ')' case_items ENDCASE
                 | CASEZ '(' expression ')' case_items ENDCASE""")
 def p_statement(p):
-    raise NotImplementedError
+    p[0] = ast.Case(p.slice[1], p[3], p[5], p.slice[6])
 
 @G("""statements : statement statements
                  | empty""")
@@ -285,10 +286,12 @@ def p_statements(p):
     else:
         p[0] = []
 
-@G("""statement_opt : statement
-                    | ';'""")
+@G("statement_opt : statement")
 def p_statement_opt(p):
-    p[0] = p[1]
+    p[0] = p[1];
+@G("statement_opt : ';'")
+def p_statement_opt_null(p):
+    p[0] = p.slice[1]
 
 @G("""block_name_opt : empty
                      | block_name""")
@@ -320,13 +323,19 @@ def p_sensitivity(p):
 @G("""case_items : case_item case_items
                  | case_item""")
 def p_case_items(p):
-    raise NotImplementedError
+    if len(p) > 2:
+        p[0] = p[2]
+        p[2].insert(0, p[1])
+    else:
+        p[0] = [p[1]]
 
 @G("""case_item : DEFAULT ':' statement_opt
-                | DEFAULT statement_opt
-                | expressions ':' statement_opt""")
+                | DEFAULT statement_opt""")
+def p_case_item_default(p):
+    p[0] = ast.CaseItem(p.slice[1], p[len(p)-1])
+@G("case_item : expressions ':' statement_opt")
 def p_case_item(p):
-    raise NotImplementedError
+    p[0] = ast.CaseItem(p[1], p[3])
 
 @G("""expression : NUMBER
                  | STRING
