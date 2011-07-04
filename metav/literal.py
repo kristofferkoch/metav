@@ -14,7 +14,7 @@
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
-from vast import Expression, _get_end
+from .vast import Expression, _get_end
 
 UNSIZED = re.compile(r'^[0-9]+$')
 BIN     = re.compile(r'^(?P<size>[0-9]*)\'[bB](?P<bin>[01_zxZX?]+)$')

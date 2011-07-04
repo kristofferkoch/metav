@@ -1,7 +1,7 @@
 import ply.yacc
 from ply.yacc import GRAMMAR as G
-from lex import tokens
-import vast as ast
+from .lex import tokens
+import metav.vast as ast
 
 @G('''source : empty
              | module source''')

@@ -16,7 +16,7 @@
 import re
 import ply.lex
 import copy
-from literal import VerilogNumber, String
+from .literal import VerilogNumber, String
 import ast
 
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',

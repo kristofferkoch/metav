@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 # This file is part of metav.
 
 # metav is free software: you can redistribute it and/or modify it
@@ -62,6 +61,6 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
 if __name__ == "__main__":
     import sys
     top = sys.argv[1]
-    process(top, modpath=("../test",), incpath=("../test/include",))
+    process(top, modpath=("test",), incpath=("test/include",))
     
     

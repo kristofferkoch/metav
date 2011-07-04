@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
-import literal
+import metav.literal
 
 def _get_end(i):
     l = i.pos_stack[-1]
@@ -419,7 +419,7 @@ class PartSelect(Expression):
             self.expr.parent = self
             self.msb = self.expr
             self.lsb = self.expr
-            self.size = literal.VerilogNumber("1")
+            self.size = metav.literal.VerilogNumber("1")
             self.size.parent = self
         elif self.type == "range":
             self.msb = kwargs["msb"]
