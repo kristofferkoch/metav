@@ -15,48 +15,56 @@
 
 import re,os.path
 
-def _include(m, incpath, defines, state):
+def _include(m, state):
     if not state['ifdef']: return ""
     filename = m.group(1)
-    for p in incpath:
+    for p in state['incpath']:
         p = os.path.join(p, filename)
         if os.path.isfile(p):
-            return preproc(p, incpath, defines, state)
+            return preproc(p, state)
     raise IOError("Could not find %s in include path" % (filename, ))
 
-def _macro(m, path, defines, state):
+def _macro(m, state):
     if not state['ifdef']: return ""
     macro = m.group(1)
     #print("macro: "+macro)
-    return "`macro(%s)%s`endmacro(%s)" % (macro, _process(defines[macro], path, defines, state), macro)
+    return "`macro(%s)%s`endmacro(%s)" % \
+        (macro, _process(state['defines'][macro], state), macro)
 
-def _define(m, path, defines, state):
+def _define(m, state):
     if not state['ifdef']: return ""
     macro = m.group(1)
     value = m.group(2)
     #print("define "+macro+"="+value)
-    assert macro not in defines
-    defines[macro] = value
+    assert macro not in state['defines']
+    state['defines'][macro] = value
     return ""
 
-def _drop(m, path, defines, state):
+def _drop(m, state):
     return ""
 
-def _ifdef(m, path, defines, state):
+def _ifdef(m, state):
     var = m.group(1)
-    if var not in defines:
+    if var not in state['defines']:
         state['ifdef'] = False
+    state['in_ifdef'] += 1
     return ""
-def _ifndef(m, path, defines, state):
+def _ifndef(m, state):
     var = m.group(1)
-    if var in defines:
+    if var in state['defines']:
         state['ifdef'] = False
+    state['in_ifdef'] += 1
     return ""
-def _else(m, path, defines, state):
+def _else(m, state):
     state['ifdef'] = not state['ifdef']
+    if state['in_ifdef'] <= 0:
+        raise Exception("Spurious `else")
     return ""
-def _endif(m, path, defines, state):
+def _endif(m, state):
     state['ifdef'] = True
+    state['in_ifdef'] -= 1
+    if state['in_ifdef'] < 0:
+        raise Exception("Spurious `endif")
     return ""
 
 regexs = (
@@ -78,13 +86,17 @@ regexs = (
 
 regexs = [(re.compile(r), a) for (r, a) in regexs]
 
-def preproc(filename, incpath = ('.',), defines = {}, state = {'ifdef': True}):
+def preproc(filename, state = {}):
+    if 'in_ifdef' not in state: state['in_ifdef'] = 0
+    if 'ifdef' not in state: state['ifdef'] = True
+    if 'defines' not in state: state['defines'] = {}
+    if 'incpath' not in state: state['incpath'] = ('.',)
     cont = open(filename).read()
     return "`file(%s)" % filename + \
-        _process(cont, incpath, defines, state) +\
+        _process(cont, state) +\
         "`endfile(%s)" % filename
     
-def _process(cont, path, defines, state):
+def _process(cont, state):
     lineno = 1;
     char = 0;
     skipped = 0
@@ -100,7 +112,7 @@ def _process(cont, path, defines, state):
             end = m.end()
             assert end > 0
             if action:
-                gen = action(m, path, defines, state)
+                gen = action(m, state)
             else:
                 if state['ifdef']: gen = matched
                 else:              gen = ""
