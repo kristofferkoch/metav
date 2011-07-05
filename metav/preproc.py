@@ -94,7 +94,6 @@ def _process(cont, path, defines, state):
         for (regex, action) in regexs:
             m = regex.match(cont)
             if not m: continue
-            #print(dir(regex))
             matched = m.group(0)
             #print("%s matched %s" % (regex.pattern, repr(matched)))
             got_match = True
@@ -117,6 +116,7 @@ def _process(cont, path, defines, state):
             char += end
             lineno += matched.count('\n')
             cont = cont[end:]
+            break
         assert got_match, "One regex must match. %s... unmatched" % (repr(cont[:20]),)
     return ret
 
