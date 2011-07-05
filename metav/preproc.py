@@ -60,19 +60,20 @@ def _endif(m, path, defines, state):
     return ""
 
 regexs = (
-    (r'//[^\n]*',       None),
+    (r'//[^\n]*',       None),    # Line comments
     (r'/\*metav_delete:', _drop),
     (r':metav_delete\*/', _drop),
     (r'/\*metav_generated:\*/(.|\n)*?/\*:metav_generated\*/', _drop),
-    (r'/\*(.|\n)*?\*/', None),
-    (r'"(\\"|[^"])*"', None),
+    (r'/\*(.|\n)*?\*/', None),    # Block comments
+    (r'"(\\"|[^"])*"', None),     # Strings
     (r'`include\s+"([^"]+)"', _include),
     (r'`ifdef\s+(\S+)', _ifdef),
     (r'`ifndef\s+(\S+)', _ifndef),
     (r'`else', _else),
     (r'`endif', _endif),
     (r'`define\s+([A-Za-z0-9_]+)\s+(.*?)(?=\n|//|/\*)', _define),
-    (r'`([A-Za-z_0-9]+)', _macro)
+    (r'`([A-Za-z_0-9]+)', _macro),
+    (r'(.|\n)([^/`":]|\n)*', None), # Match the rest, as greedy as possible
     )
 
 regexs = [(re.compile(r), a) for (r, a) in regexs]
@@ -89,42 +90,34 @@ def _process(cont, path, defines, state):
     skipped = 0
     ret = ""
     while cont:
+        got_match = False
         for (regex, action) in regexs:
             m = regex.match(cont)
-            if m:
-                end = m.end()
-                assert end > 0
-                char += end
-                if action:
-                    gen = action(m, path, defines, state)
-                    lineno += m.group(0).count('\n')
-                else:
-                    matched = m.group(0)
-                    lineno += matched.count('\n')
-                    if state['ifdef']: gen = matched
-                    else:              gen = ""
-                if skipped > 0 and len(gen) > 0:
-                    ret += "`pos(%d,%d)" % (lineno, char)
-                    skipped = 0;
-                ret += gen
-                if len(gen) < end:
-                    skipped += end - len(gen)
-                elif len(gen) > end:
-                    ret += "`pos(%d,%d)" % (lineno, char)
-                cont = cont[end:]
-                break
-        else:
-            if state['ifdef']:
-                if skipped > 0:
-                    ret += "`pos(%d,%d)" % (lineno, char)
-                    skipped = 0;
-                ret += cont[0]
+            if not m: continue
+            #print(dir(regex))
+            matched = m.group(0)
+            #print("%s matched %s" % (regex.pattern, repr(matched)))
+            got_match = True
+            end = m.end()
+            assert end > 0
+            if action:
+                gen = action(m, path, defines, state)
             else:
-                skipped += 1
-            if cont[0] == '\n':
-                lineno += 1;
-            char += 1;
-            cont = cont[1:]
+                if state['ifdef']: gen = matched
+                else:              gen = ""
+            if skipped != 0 and len(gen) > 0:
+                # We continue to emit text after having skipped a section
+                # emit a `pos to tell lexer how much we have skipped
+                ret += "`pos(%d,%d)" % (lineno, char)
+                skipped = 0;
+            ret += gen
+            if len(gen) != end:
+                # We have removed or added text
+                skipped += end - len(gen)
+            char += end
+            lineno += matched.count('\n')
+            cont = cont[end:]
+        assert got_match, "One regex must match. %s... unmatched" % (repr(cont[:20]),)
     return ret
 
 if __name__ == "__main__":
