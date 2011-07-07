@@ -10,3 +10,4 @@
 
 * Make a regression testing framework
 
+* Add support for `MACRO(x) "functions"
