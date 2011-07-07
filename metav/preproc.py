@@ -28,8 +28,11 @@ def _macro(m, state):
     if not state['ifdef']: return ""
     macro = m.group(1)
     #print("macro: "+macro)
-    return "`macro(%s)%s`endmacro(%s)" % \
-        (macro, _process(state['defines'][macro], state), macro)
+    if macro in state['defines']:
+        return "`macro(%s)%s`endmacro(%s)" % \
+            (macro, _process(state['defines'][macro], state), macro)
+    else:
+        return ""
 
 def _define(m, state):
     if not state['ifdef']: return ""
