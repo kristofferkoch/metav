@@ -47,6 +47,7 @@ class Ast(object):
         self._make_edit_plan()
         if not getattr(self, 'is_root_node', False):
             self.parent.delete_child(self)
+        self.parent = None
         self.edit_plan.append(('remove',) + self.pos)
 
 class Module(Ast):
@@ -68,29 +69,27 @@ class Module(Ast):
         assert isinstance(name, Id)
         self.name = name
 
-        self.ids = {}
         self.modparams = modparams
-        if modparams:
-            self._extract_modparams()
-        self.modports = modports
-        if modports and isinstance(modports[0], Port):
-            # ports are declared in the portlist
-            self._extract_portlist()
-        
+        self.modports = modports    
         self.items = items
-        self._extract_declarations()
-    
-        # Identify "output reg" declarations, and index them as
-        # one output declaration and one reg declaration
-        self._extract_output_reg()
-
+        self._build_ids()
+        
         self.insts = dict((i.module_name.value, i) for i in self.items
                           if type(i) == ModuleInsts)
         print("module " + self.name.value)
         for id in self.ids:
             print(id+":\t"+repr(self.ids[id]))
-        self.to_add = []
-        
+
+    def _build_ids(self):
+        self.ids = {}
+        self._extract_modparams()
+        self._extract_modports()
+        self._extract_declarations()
+        # Identify "output reg" declarations, and index them as
+        # one output declaration and one reg declaration
+        self._extract_output_reg()
+
+
     def _extract_declarations(self):
         for i in self.items:
             assert isinstance(i, Ast)
@@ -109,6 +108,8 @@ class Module(Ast):
                         self.Decl(i, id_or_assign))
         
     def _extract_modports(self):
+        if not self.modports or not isinstance(self.modports[0], Port):
+            return
         for p in self.modports:
             assert isinstance(p, Port)
             p.parent = self
@@ -118,6 +119,8 @@ class Module(Ast):
         
 
     def _extract_modparams(self):
+        if not self.modparams:
+            return
         for p in self.modparams:
             assert isinstance(p, Parameter)
             p.parent = self
@@ -199,24 +202,38 @@ class Module(Ast):
         instruction = ('insert', self.append_pos,  item)
         item.instruction = instruction
         self.edit_plan.append(instruction)
+        self._build_ids()
     def add_port(self, port):
         assert isinstance(port, Port)
         self._make_edit_plan()
         raise NotImplementedError
+    def delete_port(self, name):
+        pass
 
     def delete_child(self, child):
         # First, check if it is a module item
         for n, item in enumerate(self.items):
             if item is child:
                 del self.items[n]
+                self._build_ids()
                 return
 
         # If it is not a module item, check if it is a modport
- 
-        # If not item or modport, maybe modparam?
+        for n, modport in enumerate(self.modports):
+            if modport is child:
+                del self.modports[n]
+                self._build_ids()
+                return
 
-        # Remove all declarations from ids depending on this child
-        raise NotImplementedError
+        # If not item or modport, maybe modparam?
+        for n, modparam in enumerate(self.modparams):
+            if modparam is child:
+                del self.modparams[n]
+                self._build_ids()
+                return
+
+        assert False, "Could not find child "+repr(child)
+    
 
 class Port(Ast):
     def __init__(self, ids, range=None):

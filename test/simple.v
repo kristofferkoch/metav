@@ -32,13 +32,13 @@ module simple(/*AUTOARG*/
     "Docstring goes here. Note the indentation."
     x = "hello world"
     print(x.capitalize())
-    print(module)
-    for id in module.ids:
-       print(id+":\t"+repr(module.ids[id]))
     module.add_item(ast.Input(ast.Id("generated_input")))
     for i in module.items:
        if isinstance(i, ast.ContAssigns):
           i.delete()
+    print(module)
+    for id in module.ids:
+       print(id+":\t"+repr(module.ids[id]))
     */
    /*metav_generated:*/
    assign ignored = "This code is ignored by the lexer";
