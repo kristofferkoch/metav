@@ -215,14 +215,21 @@ class Module(Ast):
         raise NotImplementedError
 
 class Port(Ast):
-    def __init__(self, kw, range_, ids, last, in_portlist=False):
-        self.pos = (kw.pos_stack, last.pos[1])
-        self.type = kw.value
-        self.range = range_
+    def __init__(self, ids, range=None):
+        if type(ids) is not list:
+            ids = [ids]
+        self.ids = ids
+        self.range = range
         if self.range:
             self.range.parent = self
-        self.ids = ids
-        for i in ids: i.parent = self
+        self.range = range
+        for i in ids:
+            i.parent = self
+
+    def parse_info(self, kw, in_portlist=False):
+        last = self.ids[-1]
+        self.pos = (kw.pos_stack, last.pos[1])
+        assert self.type == kw.value
         self.in_portlist = in_portlist
     def append(self, id_):
         self.ids.append(id_)
@@ -237,42 +244,60 @@ class Port(Ast):
 
 
 class Input(Port):
-    pass
+    type = "input"
 class Output(Port):
-    def __init__(self, kw, reg, range_, ids, last, in_portlist=False):
-        Port.__init__(self, kw, range_, ids, last, in_portlist)
+    type = "output"
+    def __init__(self, ids, range=None, reg=None):
+        Port.__init__(self, ids, range=range)
         self.reg_kw = reg
-        self.is_reg = hasattr(reg, 'value') and bool(reg.value)
+        self.is_reg = getattr(reg, 'value', None) == "reg"
 class Inout(Port):
-    pass
+    type = "inout"
 
 class Range(Ast):
-    def __init__(self, left, msb, lsb, right):
-        self.pos = (left.pos_stack, _get_end(right))
+    def __init__(self, msb, lsb):
+        assert isinstance(msb, Expression)
+        assert isinstance(lsb, Expression)
         self.msb = msb
         self.lsb = lsb
         msb.parent = self
         lsb.parent = self
+    def parse_info(self, left, right):
+        self.pos = (left.pos_stack, _get_end(right))
+        
     def __str__(self):
         return "["+str(self.msb)+":"+str(self.lsb)+"]"
 
 class ContAssigns(Ast):
-    def __init__(self, kw, assigns, last):
-        self.pos = (kw.pos_stack, last.pos[1])
+    def __init__(self, assigns):
         self.assigns = assigns
-        for a in assigns: a.parent = self
+        for a in assigns:
+            a.parent = self
+    def parse_info(self, kw):
+        last = self.assigns[-1]
+        self.pos = (kw.pos_stack, last.pos[1])
+        
     def __str__(self):
         return "assign " + '\n'.join(str(x) for x in self.assigns) + ";"
 
 class Parameter(Ast):
-    def __init__(self, type_, range_, assigns):
-        self.pos = (type_.pos_stack, assigns[-1].pos[1])
-        self.type = type_.value
-        self.range = range_
+    def __init__(self, assigns, type="parameter", range=None):
+        self.type = type
+        self.range = range
         if self.range:
             self.range.parent = self
+            assert isinstance(self.range, Range)
+        type_ = __builtins__['type']
+        if type_(assigns) is not list:
+            assigns = [assigns]
         self.assigns = assigns
-        for a in assigns: a.parent = self
+        for a in assigns:
+            a.parent = self
+
+    def parse_info(self, type_kw):
+        self.pos = (type_kw.pos_stack, self.assigns[-1].pos[1])
+        self.type = type_kw.value
+        
     def append(self, assign):
         self.assigns.append(assign)
         assign.parent = self
@@ -282,13 +307,18 @@ class Parameter(Ast):
             ',\n\t\t'.join(str(x) for x in self.assigns) + ";"
 
 class Wire(Ast):
-    def __init__(self, kw, range_, ids_or_assigns, last):
-        self.pos = (kw.pos_stack, last.pos[1])
-        self.range = range_
+    def __init__(self, ids_or_assigns, range=None):
+        self.range = range
         if self.range:
             self.range.parent = self
+            assert isinstance(range, Range)
         self.ids_or_assigns = ids_or_assigns
-        for i in ids_or_assigns: i.parent = self
+        for i in ids_or_assigns:
+            i.parent = self
+    def parse_info(self, kw):
+        last = self.ids_or_assigns[-1]
+        self.pos = (kw.pos_stack, last.pos[1])
+        
     def __str__(self):
         r = ""
         if self.range:
@@ -298,13 +328,19 @@ class Wire(Ast):
         return ret
 
 class Reg(Ast):
-    def __init__(self, kw, range_, ids_or_mem, last):
-        self.pos = (kw.pos_stack, last.pos[1])
-        self.range = range_
+    def __init__(self, ids_or_mem, range=None):
+        self.range = range
         if self.range:
+            assert isinstance(range, Range)
             self.range.parent = self
         self.ids_or_mem = ids_or_mem
-        for i in ids_or_mem: i.parent = self
+        for i in ids_or_mem:
+            i.parent = self
+
+    def parse_info(self, kw):
+        last = self.ids_or_mem[-1]
+        self.pos = (kw.pos_stack, last.pos[1])
+        
     def __str__(self):
         r = ""
         if self.range:
@@ -316,27 +352,35 @@ class Reg(Ast):
 
 class MemReg(Ast):
     def __init__(self, id_, range_):
-        self.pos = (id_.pos_stack, range_.pos[1])
-        self.id = id_.value
+        assert isinstance(id_, Id)
+        if hasattr(id_, 'pos'):
+            self.pos = (id_.pos[0], range_.pos[1])
+        self.id = id_
         self.id.parent = self
         self.range = range_
         self.range.parent = self
         self.value = id_.value
+        
     def __str__(self):
         return self.value + " "+str(self.range)
 
 class Always(Ast):
-    def __init__(self, kw, statement):
-        self.pos = (kw.pos_stack, statement.pos[1])
+    def __init__(self, statement):
         self.statement = statement
         self.statement.parent = self
+    def parse_info(self, kw):
+        self.pos = (kw.pos_stack, self.statement.pos[1])
+        
     def __str__(self):
         return "always " + str(self.statement)
 
 class Edge(Ast):
     def __init__(self, polarity, signal):
-        self.pos = (polarity.pos_stack, signal.pos[1])
-        self.polarity = polarity.value
+        if hasattr(polarity, 'pos_stack'):
+            self.pos = (polarity.pos_stack, signal.pos[1])
+            self.polarity = polarity.value
+        else:
+            self.polarity = polarity
         self.signal = signal
         self.signal.parent = self
     def __str__(self):
@@ -344,7 +388,9 @@ class Edge(Ast):
 
 class ModuleInsts(Ast):
     def __init__(self, module_name, param_overrides, insts):
-        self.pos = (module_name.pos[0], insts[-1].pos[1])
+        if hasattr(module_name, "pos"):
+            self.pos = (module_name.pos[0], insts[-1].pos[1])
+        assert isinstance(module_name, Id)
         self.module_name = module_name
         module_name.parent = self
         self.param_overrides = param_overrides
@@ -363,23 +409,28 @@ class ModuleInsts(Ast):
         return ret
 
 class ModuleInst(Ast):
-    def __init__(self, inst_name, connections, right):
-        self.pos = (inst_name.pos[0], right.pos_stack)
+    def __init__(self, inst_name, connections):
         self.inst_name = inst_name
         self.inst_name.parent = self
         self.connections = connections
-        for c in connections: c.parent = self
+        for c in connections:
+            c.parent = self
+    def parse_info(self, right):
+        self.pos = (self.inst_name.pos[0], _get_end(right))
+        
     def __str__(self):
         return self.inst_name.value + \
             ' (' + ',\n\t\t\t'.join(str(x) for x in self.connections) + ")"
 
 class Connection(Ast):
     def __init__(self, dot, id_, expr, right):
-        self.pos = (dot.pos_stack, right.pos_stack)
         self.id = id_
         self.id.parent = self
         self.expr = expr
         self.expr.parent = self
+    def parse_info(self, dot, right):
+        self.pos = (dot.pos_stack, _get_end(right))
+        
     def __str__(self):
         return "."+self.id.value+'('+str(self.expr)+')'
 
@@ -387,11 +438,16 @@ class Statement(Ast):
     pass
 
 class Case(Statement):
-    def __init__(self, kw, expr, items, end):
-        self.pos = (kw.pos_stack, end.pos_stack)
-        self.type = kw.value
+    def __init__(self, expr, items, type="case"):
         self.expr = expr
         self.items = items
+        self.type = type
+        assert type in ("case", "casez", "casex")
+    def parse_info(self, kw, endcase):
+        self.pos = (kw.pos_stack, endcase.pos_stack)
+        self.type = kw.value
+        assert type in ("case", "casez", "casex")
+        
     def __str__(self):
         ret = self.type+"(%s)\n\t\t" % str(self.expr)
         ret += '\n\t\t'.join(str(x) for x in self.items)
@@ -404,6 +460,7 @@ class CaseItem(Ast):
             pos0 = expressions[0].pos[0]
             self.expressions = expressions
         else:
+            # default case:
             pos0 = expressions.pos_stack
             self.expressions = None
         if isinstance(statement, Statement):
@@ -425,7 +482,8 @@ class CaseItem(Ast):
 
 class Assign(Statement):
     def __init__(self, lval, op, rval, is_statement = False):
-        self.pos = (lval.pos[0], rval.pos[1])
+        if hasattr(lval, 'pos'):
+            self.pos = (lval.pos[0], rval.pos[1])
         self.lval = lval
         self.lval.parent = self
         self.op = op
@@ -440,37 +498,44 @@ class Assign(Statement):
         return ret
         
 class At(Statement):
-    def __init__(self, at, sens, statement):
-        self.pos = (at.pos_stack, statement.pos[1])
+    def __init__(self, sens, statement):
         self.sens = sens
         if sens:
             for s in sens: s.parent = self
         self.statement = statement
         self.statement.parent = self
+    def parse_info(self, at):
+        self.pos = (at.pos_stack, self.statement.pos[1])
     def __str__(self):
         sens = self.sens
         if not sens: sens = "*"
         else: sens = ' or '.join(str(x) for x in sens)
         return "@(" + sens + ") " + str(self.statement)
+
 class If(Statement):
-    def __init__(self, kw, cond, true, false):
-        self.pos = (kw.pos_stack, false.pos[1] if false else true.pos[1])
+    def __init__(self, cond, true, false):
         self.cond = cond
         self.cond.parent = self
         self.true = true
         self.true.parent = self
         self.false = false
         self.false.parent = self
+    def parse_info(self, kw):
+        self.pos = (kw.pos_stack,
+                    self.false.pos[1] if self.false else self.true.pos[1])
+        
     def __str__(self):
         ret = "if ( " + str(self.cond) + " )\n\t\t\t" + str(self.true)
         if self.false:
             ret += "\n\t\telse\n\t\t\t" + str(self.false)
         return ret
 class Block(Statement):
-    def __init__(self, begin, name, statements, end):
-        self.pos = (begin.pos_stack, _get_end(end))
+    def __init__(self, name, statements):
         self.name = name
         self.statements = statements
+    def parse_info(self, begin, end):
+        self.pos = (begin.pos_stack, _get_end(end))
+        
     def __str__(self):
         return "begin\n\t\t" + \
             '\n\t\t'.join(str(x) for x in self.statements) + "\n\tend"
@@ -480,16 +545,21 @@ class Expression(Ast):
 
 class Id(Expression):
     def __init__(self, id_):
-        self.pos = (id_.pos_stack, _get_end(id_))
-        self.value = id_.value
+        if hasattr(id_, 'pos_stack'):
+            self.pos = (id_.pos_stack, _get_end(id_))
+            self.value = id_.value
+        else:
+            self.value = id_
     def __str__(self):
+        # TODO: output escaped ids correctly
         return self.value
 
 
 class PartSelect(Expression):
     def __init__(self, **kwargs):
         self.id = kwargs['id']
-        self.pos = (self.id.pos[0], kwargs['end'].pos_stack)
+        if hasattr(self.id, 'pos'):
+            self.pos = (self.id.pos[0], kwargs['end'].pos_stack)
         self.type = kwargs['type']
         if self.type == "single":
             self.expr = kwargs["expr"]
@@ -526,7 +596,8 @@ class PartSelect(Expression):
 
 class BinaryOp(Expression):
     def __init__(self, a, op, b):
-        self.pos = (a.pos[0], b.pos[1])
+        if hasattr(a, 'pos'):
+            self.pos = (a.pos[0], b.pos[1])
         self.a = a
         self.a.parent = self
         self.op = op
@@ -537,7 +608,8 @@ class BinaryOp(Expression):
 
 class UnaryOp(Expression):
     def __init__(self, op, expr):
-        self.pos = (op.pos_stack, expr.pos[1])
+        if hasattr(op, 'pos_stack'):
+            self.pos = (op.pos_stack, expr.pos[1])
         self.expr = expr
         self.expr.parent = self
         self.op = op.value
@@ -546,7 +618,8 @@ class UnaryOp(Expression):
 
 class Ternary(Expression):
     def __init__(self, cond, true, false):
-        self.pos = (cond.pos[0], false.pos[1])
+        if hasattr(cond, 'pos'):
+            self.pos = (cond.pos[0], false.pos[1])
         self.cond = cond
         self.cond.parent = self
         self.true = true
@@ -558,21 +631,24 @@ class Ternary(Expression):
             str(self.true) + ')\n\t\t: (' + str(self.false) + ')'
 
 class Repetition(Expression):
-    def __init__(self, left, repeat, concat, right):
-        self.pos = (left.pos_stack, _get_end(right))
+    def __init__(self, repeat, concat):
         self.repeat = repeat
         self.repeat.parent = self
         self.concat = concat
         self.concat.parent = self
+    def parse_info(self, left, right):
+        self.pos = (left.pos_stack, _get_end(right))
     def __str__(self):
         return '{' + str(self.repeat) + str(self.concat) + '}'
 
 class Concatenation(Expression):
-    def __init__(self, left, expressions, right):
-        self.pos = (left.pos_stack, _get_end(right))
+    def __init__(self, expressions):
         self.expressions = expressions
         for e in expressions:
             e.parent = self
+    def parse_info(self, left, right):
+        self.pos = (left.pos_stack, _get_end(right))
+        
     def __str__(self):
         return '{' + ', '.join(str(x) for x in self.expressions) + '}'
 

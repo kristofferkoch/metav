@@ -20,7 +20,8 @@ from .literal import VerilogNumber, String
 import ast
 
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',
-            'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ', 'ENDCASE',
+            'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ',
+            'CASEX', 'ENDCASE',
             'PARAMETER', 'LOCALPARAM', 'BEGIN', 'END', 'IF', 'ELSE', 'DEFAULT')
 keyword_map = {}
 for r in keywords:
