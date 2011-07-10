@@ -35,10 +35,11 @@ module simple(/*AUTOARG*/
     print(module)
     for id in module.ids:
        print(id+":\t"+repr(module.ids[id]))
+    #module.add_item("HELLO, WORLD")
     */
-   /*metav generated:*/
+   /*metav_generated:*/
    assign ignored = "This code is ignored by the lexer";
    syntax errors are ignored;
    Lexer errors are also ignored: ¤;
-   /*end metav generated*/
+   /*:metav_generated*/
 endmodule

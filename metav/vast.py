@@ -13,49 +13,86 @@
 # You should have received a copy of the GNU General Public License
 # along with metav.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Objects for constructing a Verilog Abstract Syntax Tree (vast)"""
+
 import metav.literal
 
 def _get_end(i):
-    l = i.pos_stack[-1]
+    "Given a pos_stack, calculate the position + length of identifier"
+    last = i.pos_stack[-1]
     off = len(str(i.value))
-    return i.pos_stack[:1] + ((l[0], l[1], l[2] + off, l[3], l[4] + off),)
+    return i.pos_stack[:1] + \
+        ((last[0], last[1], last[2] + off, last[3], last[4] + off),)
 
 class Ast(object):
+    """Superclass to all nodes in the syntax tree"""
     def extend_pos(self, end):
+        "Update the position of the AST element by extending the end"
         self.pos = (self.pos[0], end)
-    
+    def delete_child(self, child):
+        "Delete a child from the AST. To be called from child in child.delete()"
+        # To be overridden if it makes sense
+        raise NotImplementedError
+    def _get_edit_plan(self):
+        "Search for edit plan in self and parents"
+        if hasattr(self, 'edit_plan'):
+            return self.edit_plan
+        return self.parent._get_edit_plan()
+
+    def _make_edit_plan(self):
+        if not hasattr(self, 'edit_plan'):
+            self.edit_plan = self._get_edit_plan()
+
+    def delete(self):
+        self._make_edit_plan()
+        if not getattr(self, 'is_root_node', False):
+            self.parent.delete_child(self)
+        self.edit_plan.append(('remove',) + self.pos)
+
 class Module(Ast):
+    """Module is the root node for the AST's
+    
+    A Module instance has some useful attributes:
+     * name:  The module name identifier. An instance of Id
+     * items: The items of the module body
+     * insts: A dict(module name -> ModuleInsts) with instanciated
+              modules. ModuleInsts.module might be populated with
+              the AST for the instanciated modules
+     * ids: A dict(identifier name -> set(Decl)) of declarations
+            found in the module. Ports and parameters are found here.
+    """
     def __init__(self, module, name, modparams, modports, items, endmodule):
         self.pos = (module.pos_stack, _get_end(endmodule))
+        self.append_pos = endmodule.pos_stack
+        self.is_root_node = True
         assert isinstance(name, Id)
         self.name = name
-        assert modparams == None or isinstance(modparams[0], Parameter)
-        self.modparams = modparams
-        assert modports == None or len(modports) == 0 or \
-            isinstance(modports[0], Port) or isinstance(modports[0], Id)
-        self.modports = modports
-        assert len(items) == 0 or isinstance(items[0], Ast)
-        self.items = items
 
         self.ids = {}
+        self.modparams = modparams
         if modparams:
-            for p in modparams:
-                assert isinstance(p, Parameter)
-                p.parent = self
-                for assign in p.assigns:
-                    assert isinstance(assign, Assign)
-                    assert isinstance(assign.lval, Id)
-                    self.ids.setdefault(assign.lval.value, set()).add(
-                        self.Decl(p, assign))
-        if modports and hasattr(modports[0], 'ids'):
-            for p in modports:
-                assert isinstance(p, Port)
-                p.parent = self
-                for id_ in p.ids:
-                    assert isinstance(id_, Id)
-                    self.ids.setdefault(id_.value, set()).add(self.Decl(p, id_))
-                
-        for i in items:
+            self._extract_modparams()
+        self.modports = modports
+        if modports and isinstance(modports[0], Port):
+            # ports are declared in the portlist
+            self._extract_portlist()
+        
+        self.items = items
+        self._extract_declarations()
+    
+        # Identify "output reg" declarations, and index them as
+        # one output declaration and one reg declaration
+        self._extract_output_reg()
+
+        self.insts = dict((i.module_name.value, i) for i in self.items
+                          if type(i) == ModuleInsts)
+        print("module " + self.name.value)
+        for id in self.ids:
+            print(id+":\t"+repr(self.ids[id]))
+        self.to_add = []
+        
+    def _extract_declarations(self):
+        for i in self.items:
             assert isinstance(i, Ast)
             i.parent = self
             if hasattr(i, 'ids'):          ids = i.ids
@@ -70,15 +107,26 @@ class Module(Ast):
                 else:
                     self.ids.setdefault(id_or_assign.value, set()).add(
                         self.Decl(i, id_or_assign))
+        
+    def _extract_modports(self):
+        for p in self.modports:
+            assert isinstance(p, Port)
+            p.parent = self
+            for id_ in p.ids:
+                assert isinstance(id_, Id)
+                self.ids.setdefault(id_.value, set()).add(self.Decl(p, id_))
+        
 
-        self._extract_output_reg()
+    def _extract_modparams(self):
+        for p in self.modparams:
+            assert isinstance(p, Parameter)
+            p.parent = self
+            for assign in p.assigns:
+                assert isinstance(assign, Assign)
+                assert isinstance(assign.lval, Id)
+                self.ids.setdefault(assign.lval.value, set()).add(
+                    self.Decl(p, assign))
 
-        self.insts = dict((i.module_name.value, i) for i in self.items
-                          if type(i) == ModuleInsts)
-        print("module " + self.name.value)
-        for id in self.ids:
-            print(id+":\t"+repr(self.ids[id]))
-        self.to_add = []
 
     def _extract_output_reg(self):
         # Some output declarations have "reg" as well
@@ -90,7 +138,8 @@ class Module(Ast):
                 o = decl.ast
                 assert decl.id.value == id_
                 if o.is_reg:
-                    regdecl = self.Decl(Reg(o.reg_kw, o.range, [decl.id], decl.id),
+                    regdecl = self.Decl(Reg(o.reg_kw, o.range,
+                                            [decl.id], decl.id),
                                         decl.id)
                     to_add.add(regdecl)
             self.ids[id_].update(to_add)
@@ -133,15 +182,37 @@ class Module(Ast):
             return str(x)
         ret = "module %s " % (self.name.value,)
         if self.modparams:
-            ret += "#(parameter " + ',\n\t'.join(str(x) for x in self.modparams) + ")\n\t"
+            ret += "#(parameter " + \
+                ',\n\t'.join(str(x) for x in self.modparams) + ")\n\t"
         if type(self.modports) == list:
             ret += '(' + ', '.join(mystr(x) for x in self.modports) + ')'
         ret += ";\n\t"
         ret += '\n\t'.join(str(x) for x in self.items)
         ret += "\nendmodule"
         return ret
+
     def add_item(self, item):
-        self.to_add.append(item)
+        self._make_edit_plan()
+        assert isinstance(item, Ast)
+        item.parent = self
+        self.items.append(item)
+        instruction = ('insert', self.append_pos,  item)
+        item.instruction = instruction
+        self.edit_plan.append(instruction)
+    def add_port(self, port):
+        assert isinstance(port, Port)
+        self._make_edit_plan()
+        raise NotImplementedError
+
+    def delete_child(self, child):
+        # First, check if it is a module item
+
+        # If it is not a module item, check if it is a modport
+ 
+        # If not item or modport, maybe modparam?
+
+        # Remove all declarations from ids depending on this child
+        raise NotImplementedError
 
 class Port(Ast):
     def __init__(self, kw, range_, ids, last, in_portlist=False):
@@ -150,7 +221,7 @@ class Port(Ast):
         self.range = range_
         if self.range:
             self.range.parent = self
-        self.ids = ids;
+        self.ids = ids
         for i in ids: i.parent = self
         self.in_portlist = in_portlist
     def append(self, id_):
@@ -207,7 +278,8 @@ class Parameter(Ast):
         assign.parent = self
         self.pos = (self.pos[0], assign.pos[1])
     def __str__(self):
-        return self.type + " " + ',\n\t\t'.join(str(x) for x in self.assigns) + ";";
+        return self.type + " " + \
+            ',\n\t\t'.join(str(x) for x in self.assigns) + ";"
 
 class Wire(Ast):
     def __init__(self, kw, range_, ids_or_assigns, last):
@@ -215,13 +287,14 @@ class Wire(Ast):
         self.range = range_
         if self.range:
             self.range.parent = self
-        self.ids_or_assigns = ids_or_assigns;
+        self.ids_or_assigns = ids_or_assigns
         for i in ids_or_assigns: i.parent = self
     def __str__(self):
         r = ""
         if self.range:
             r = str(self.range) + " "
-        ret = "wire " + r +',\n\t\t'.join(str(x) for x in self.ids_or_assigns) + ";"
+        ret = "wire " + r + \
+            ',\n\t\t'.join(str(x) for x in self.ids_or_assigns) + ";"
         return ret
 
 class Reg(Ast):
@@ -282,7 +355,9 @@ class ModuleInsts(Ast):
     def __str__(self):
         ret = self.module_name.value + " "
         if self.param_overrides:
-            ret += "#(" + ',\n\t\t\t'.join(str(x) for x in self.param_overrides) + ")\n\t\t"
+            ret += "#(" + \
+                ',\n\t\t\t'.join(str(x) for x in self.param_overrides) + \
+                ")\n\t\t"
         ret += ', '.join(str(x) for x in self.insts)
         ret += ";"
         return ret
@@ -295,7 +370,8 @@ class ModuleInst(Ast):
         self.connections = connections
         for c in connections: c.parent = self
     def __str__(self):
-        return self.inst_name.value + ' (' + ',\n\t\t\t'.join(str(x) for x in self.connections) + ")"
+        return self.inst_name.value + \
+            ' (' + ',\n\t\t\t'.join(str(x) for x in self.connections) + ")"
 
 class Connection(Ast):
     def __init__(self, dot, id_, expr, right):
@@ -396,7 +472,8 @@ class Block(Statement):
         self.name = name
         self.statements = statements
     def __str__(self):
-        return "begin\n\t\t" + '\n\t\t'.join(str(x) for x in self.statements) + "\n\tend"
+        return "begin\n\t\t" + \
+            '\n\t\t'.join(str(x) for x in self.statements) + "\n\tend"
 
 class Expression(Ast):
     pass
@@ -477,7 +554,8 @@ class Ternary(Expression):
         self.false = false
         self.false.parent = self
     def __str__(self):
-        return '(' + str(self.cond) + ') ? (' + str(self.true) + ')\n\t\t: (' + str(self.false) + ')'
+        return '(' + str(self.cond) + ') ? (' + \
+            str(self.true) + ')\n\t\t: (' + str(self.false) + ')'
 
 class Repetition(Expression):
     def __init__(self, left, repeat, concat, right):
@@ -493,7 +571,8 @@ class Concatenation(Expression):
     def __init__(self, left, expressions, right):
         self.pos = (left.pos_stack, _get_end(right))
         self.expressions = expressions
-        for e in expressions: e.parent = self
+        for e in expressions:
+            e.parent = self
     def __str__(self):
         return '{' + ', '.join(str(x) for x in self.expressions) + '}'
 
