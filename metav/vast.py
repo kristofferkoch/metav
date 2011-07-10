@@ -28,7 +28,7 @@ class Ast(object):
     """Superclass to all nodes in the syntax tree"""
     def extend_pos(self, end):
         "Update the position of the AST element by extending the end"
-        self.pos = (self.pos[0], end)
+        self.pos = (self.pos[0], _get_end(end))
     def delete_child(self, child):
         "Delete a child from the AST. To be called from child in child.delete()"
         # To be overridden if it makes sense

@@ -150,7 +150,7 @@ def p_module_items(p):
 def p_module_item(p):
     p[0] = p[1]
     if len(p) > 2:
-        p[0].extend_pos(p.slice[2].pos_stack)
+        p[0].extend_pos(p.slice[2])
 
 @G("""parameter_decl : PARAMETER range_opt id_assigns
                      | LOCALPARAM range_opt id_assigns""")
@@ -290,7 +290,7 @@ def p_statement_sens(p):
 def p_statement_assign(p):
     p[0] = p[1]
     p[0].is_statement = True
-    p[0].extend_pos(p.slice[2].pos_stack)
+    p[0].extend_pos(p.slice[2])
 
 @G("""statement : CASE '(' expression ')' case_items ENDCASE
                 | CASEZ '(' expression ')' case_items ENDCASE
