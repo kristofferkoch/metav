@@ -206,6 +206,10 @@ class Module(Ast):
 
     def delete_child(self, child):
         # First, check if it is a module item
+        for n, item in enumerate(self.items):
+            if item is child:
+                del self.items[n]
+                return
 
         # If it is not a module item, check if it is a modport
  
@@ -225,6 +229,7 @@ class Port(Ast):
         self.range = range
         for i in ids:
             i.parent = self
+        self.in_portlist = False
 
     def parse_info(self, kw, in_portlist=False):
         last = self.ids[-1]

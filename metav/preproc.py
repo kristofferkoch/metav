@@ -55,7 +55,7 @@ def _drop(m, state, filestate):
     size = len(m.group(0))
     begin = ('file', filestate['filename'], filestate['char'], filestate['lineno'])
     end   = ('file', filestate['filename'], filestate['char'] + size)
-    filestate['edit_plan'].append(('delete', ((begin,), (end,))))
+    filestate['edit_plan'].append(('delete', (begin,), (end,)))
     return ""
 
 def _ifdef(m, state, filestate):

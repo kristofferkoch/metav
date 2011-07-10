@@ -18,6 +18,7 @@ from metav.preproc import preproc
 from metav.lex import vLexer
 from metav.parse import vParser
 import metav.vast
+import metav.edit
 import os.path
 
 def _find_file(modulename, modpath=('.',)):
@@ -29,64 +30,6 @@ def _find_file(modulename, modpath=('.',)):
         if os.path.isfile(filename):
             return filename
     raise IOError("Could not find "+modulename + " in " + ', '.join(modpath))
-
-def _execute_edit_plan(edit_plan):
-    files = {}
-    ropes = {}
-    for p in edit_plan:
-        instruction = p[0]
-        
-        if instruction in ("remove", "delete"):
-            begin = p[1][0][-1]
-            end   = p[1][1][-1]
-            assert begin[0] == end[0] == 'file'
-            assert begin[1] == end[1]
-            filename = begin[1]
-            begin = begin[2]
-            end   = end[2]
-            assert begin < end
-        elif instruction == "insert":
-            begin = p[1][-1]
-            assert begin[0] == "file"
-            filename = begin[1]
-            begin = begin[2]
-        if not filename in files:
-            files[filename] = {
-                'contents': open(filename).read(),
-                'pos': 0,
-                }
-            ropes[filename] = []
-            assert begin >= files[filename]['pos']
-        if begin > files[filename]['pos']:
-            to_copy = begin - files[filename]['pos']
-            ropes[filename].append(files[filename]['contents'][:to_copy])
-            files[filename]['pos'] += to_copy
-            files[filename]['contents'] = files[filename]['contents'][to_copy:]
-
-        if instruction in ("remove", "delete"):
-            to_skip = end - begin
-            files[filename]['pos'] += to_skip
-            skipped = files[filename]['contents'][:to_skip]
-            files[filename]['contents'] = files[filename]['contents'][to_skip:]
-
-        if instruction == "remove":
-            ropes[filename].extend(["/*metav_delete:", skipped, ":metav_delete*/"])
-        elif instruction == "delete":
-            pass
-        elif instruction == "insert":
-            insert = str(p[2])
-            ropes[filename].extend(["/*metav_generated:*/\n",
-                                    insert,
-                                    "\n/*:metav_generated*/"])
-        else:
-            assert False, "Unknown edit plan instruction, "+repr(instruction)
-
-    for filename in ropes:
-        fd = open(filename+".out", 'w')
-        for string in ropes[filename]:
-            fd.write(string)
-        fd.write(files[filename]['contents'])
-        fd.close()
             
 
 def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
@@ -130,6 +73,6 @@ if __name__ == "__main__":
     mod = process(top, modpath=("test",), incpath=("test/include",))
     for p in mod.edit_plan:
         print(p)
-    _execute_edit_plan(mod.edit_plan)
+    metav.edit.execute(mod.edit_plan)
     
     
