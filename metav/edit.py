@@ -21,27 +21,33 @@ def _sort_key(p):
     return pos[1], pos[2]
 
 def execute(edit_plan):
-    files = {}
-    ropes = {}
+    file = {}
+    rope = {}
+    filename = None
     for p in sorted(edit_plan, key=_sort_key):
         instruction = p[0]
         begin = p[1][-1]
         assert begin[0] == "file"
-        filename = begin[1]
+        if filename != begin[1]:
+            if filename:
+                # Flush data
+                fd = open(filename+".out", 'w')
+                for string in rope:
+                    fd.write(string)
+                fd.write(file['contents'])
+                fd.close()
+            filename = begin[1]
+            file = {'contents': open(filename).read(),
+                    'pos': 0,}
+            rope = []
         begin = begin[2]
+        assert begin >= file['pos']
 
-        if not filename in files:
-            files[filename] = {
-                'contents': open(filename).read(),
-                'pos': 0,
-                }
-            ropes[filename] = []
-            assert begin >= files[filename]['pos']
-        if begin > files[filename]['pos']:
-            to_copy = begin - files[filename]['pos']
-            ropes[filename].append(files[filename]['contents'][:to_copy])
-            files[filename]['pos'] += to_copy
-            files[filename]['contents'] = files[filename]['contents'][to_copy:]
+        if begin > file['pos']:
+            to_copy = begin - file['pos']
+            rope.append(file['contents'][:to_copy])
+            file['pos'] += to_copy
+            file['contents'] = file['contents'][to_copy:]
 
         if instruction in ("remove", "delete"):
             end   = p[2][-1]
@@ -51,25 +57,18 @@ def execute(edit_plan):
             assert begin < end
 
             to_skip = end - begin
-            files[filename]['pos'] += to_skip
-            skipped = files[filename]['contents'][:to_skip]
-            files[filename]['contents'] = files[filename]['contents'][to_skip:]
+            file['pos'] += to_skip
+            skipped = file['contents'][:to_skip]
+            file['contents'] = file['contents'][to_skip:]
 
         if instruction == "remove":
-            ropes[filename].extend(["/*metav_delete:", skipped, ":metav_delete*/"])
+            rope.extend(["/*metav_delete:", skipped, ":metav_delete*/"])
         elif instruction == "delete":
             pass
         elif instruction == "insert":
             insert = str(p[2])
-            ropes[filename].extend(["/*metav_generated:*/\n",
-                                    insert,
-                                    "\n/*:metav_generated*/"])
+            rope.extend(["/*metav_generated:*/\n",
+                         insert,
+                         "\n/*:metav_generated*/"])
         else:
             assert False, "Unknown edit plan instruction, "+repr(instruction)
-
-    for filename in ropes:
-        fd = open(filename+".out", 'w')
-        for string in ropes[filename]:
-            fd.write(string)
-        fd.write(files[filename]['contents'])
-        fd.close()
