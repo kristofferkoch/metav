@@ -68,6 +68,7 @@ class Module(Ast):
         self.is_root_node = True
         assert isinstance(name, Id)
         self.name = name
+        self.block_comment = name.block_comment
 
         self.modparams = modparams
         self.modports = modports    
@@ -76,9 +77,6 @@ class Module(Ast):
         
         self.insts = dict((i.module_name.value, i) for i in self.items
                           if type(i) == ModuleInsts)
-        print("module " + self.name.value)
-        for id in self.ids:
-            print(id+":\t"+repr(self.ids[id]))
 
     def _build_ids(self):
         self.ids = {}
@@ -176,7 +174,8 @@ class Module(Ast):
                 if type(x) == Assign: return x.lval.value + ' = ' + str(x.rval)
                 return x.value
             return '<' + t + ' ' + r + s(self.id)+'>'
-        def __repr__(self): return "Module.Decl("+str(self)+")"
+        def __repr__(self):
+            return "Module.Decl("+str(self)+")"
         
     def __str__(self):
         def mystr(x):
@@ -414,6 +413,7 @@ class ModuleInsts(Ast):
             self.pos = (module_name.pos[0], insts[-1].pos[1])
         assert isinstance(module_name, Id)
         self.module_name = module_name
+        self.block_comment = module_name.block_comment
         module_name.parent = self
         self.param_overrides = param_overrides
         for p in param_overrides:
@@ -541,7 +541,8 @@ class If(Statement):
         self.true = true
         self.true.parent = self
         self.false = false
-        self.false.parent = self
+        if self.false:
+            self.false.parent = self
     def parse_info(self, kw):
         self.pos = (kw.pos_stack,
                     self.false.pos[1] if self.false else self.true.pos[1])
@@ -551,6 +552,7 @@ class If(Statement):
         if self.false:
             ret += "\n\t\telse\n\t\t\t" + str(self.false)
         return ret
+
 class Block(Statement):
     def __init__(self, name, statements):
         self.name = name
@@ -570,7 +572,10 @@ class Id(Expression):
         if hasattr(id_, 'pos_stack'):
             self.pos = (id_.pos_stack, _get_end(id_))
             self.value = id_.value
+            self.block_comment = getattr(id_.block_comment, "value", None)
+            self.line_comment = getattr(id_.line_comment, "value", None)
         else:
+            assert isinstance(id_, str)
             self.value = id_
     def __str__(self):
         # TODO: output escaped ids correctly
@@ -674,3 +679,39 @@ class Concatenation(Expression):
     def __str__(self):
         return '{' + ', '.join(str(x) for x in self.expressions) + '}'
 
+# Objects for emitting only:
+class Force(Assign):
+    def __init__(self, lval, rval):
+        assert isinstance(lval, (Id, Concatenation, PartSelect))
+        assert isinstance(rval, Expression)
+        self.lval = lval
+        self.rval = rval
+    def __str__(self):
+        return "force " + str(self.lval) + " = " + str(self.rval) + ";"
+
+class Release(Statement):
+    def __init__(self, lval):
+        assert isinstance(lval, (Id, Concatenation, PartSelect))
+        self.lval = lval
+    def __str__(self):
+        return "release " + str(self.lval) + ";"
+
+class TaskCall(Statement):
+    def __init__(self, name, arguments):
+        assert isinstance(name, Id)
+        self.name = name
+        self.arguments = arguments
+    def __str__(self):
+        return str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ');'
+
+class Delay(Statement):
+    def __init__(self, delay_expr, statement):
+        assert isinstance(delay_expr, Expression)
+        assert isinstance(statement, Statement) or statement == None
+        self.delay_expr = delay_expr
+        self.statement = statement
+    def __str__(self):
+        ret = "#" + str(self.delay_expr)
+        if self.statement:
+            return ret + " " + str(self.statement)
+        return ret + ";"
