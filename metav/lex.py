@@ -170,6 +170,7 @@ def vLexer():
                 prev_decl.line_comment = t
             else:
                 block_comment = t
+                prev_decl.line_comment = None
             prev_decl = None
         else:
             block_comment = t;

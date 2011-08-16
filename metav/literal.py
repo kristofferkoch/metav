@@ -60,14 +60,14 @@ class VerilogNumber(Expression):
             return
         dec = DEC.match(string)
         if dec:
-            s = dec_.group('dec').replace('_','')
+            s = dec.group('dec').replace('_','')
             self.value = int(s, 10)
-            self._setsize(hex_.group('size'))
+            self._setsize(dec.group('size'))
             self.xmask = 0
             self.zmask = 0
             return
             
-        assert False
+        assert False, "Unmatched verilog number"
     def _setsize(self, sizestr):
         if sizestr:
             self.size = int(sizestr)

@@ -234,6 +234,13 @@ def p_parameter_override_opt(p):
     if len(p) > 2:
         p[0] = p[3]
 
+@G("connections_opt : empty")
+def p_connections_opt_empty(p):
+    p[0] = []
+@G("connections_opt : connections")
+def p_connections_opt_some(p):
+    p[0] = p[1]
+
 @G("""connections : connection ',' connections
                   | connection""")
 def p_connections(p):
@@ -248,6 +255,7 @@ def p_connection(p):
     p[0] = ast.Connection(p[2], p[4])
     p[0].parse_info(p.slice[1], p.slice[5])
 
+
 @G("""instantiations : instantiation ',' instantiations
                      | instantiation""")
 def p_instantiations(p):
@@ -257,7 +265,7 @@ def p_instantiations(p):
     else:
         p[0] = [p[1]]
 
-@G("instantiation : id '(' connections ')'")
+@G("instantiation : id '(' connections_opt ')'")
 def p_instantiation(p):
     p[0] = ast.ModuleInst(p[1], p[3])
     p[0].parse_info(p.slice[4])
@@ -390,7 +398,7 @@ def p_repetition(p):
                   | expression""")
 def p_expressions(p):
     if len(p) > 2:
-        p[0] = [p[1]] + p[2]
+        p[0] = [p[1]] + p[3]
     else:
         p[0] = [p[1]]
 
