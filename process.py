@@ -22,7 +22,7 @@ import metav.edit
 import os.path
 
 def _find_file(modulename, modpath=('.',)):
-    if not modulename.endswith(".v"):
+    if "." not in modulename:
         modulename += ".v"
     for p in modpath:
         filename = os.path.join(p, modulename)
@@ -45,7 +45,9 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
         module_dict[module.name.value] = module
     for module in modules:
         name = module.name.value
-        if name != top: continue
+        if not top.startswith(name):
+            print("Skipping module %s" % name)
+            continue
         
         for iname in module.insts:
             inst = module.insts[iname]
@@ -57,22 +59,31 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
         module.edit_plan = edit_plan
         for code in codes.get(name, ()):
             exec(code, {'module': module,
-                        'get_module': None,
+                        'get_module': None, #TODO
                         'out': None,
                         'ast': metav.vast,
                         })
         return module
     assert False
     
-    
-    
 
 if __name__ == "__main__":
-    import sys
-    top = sys.argv[1]
-    mod = process(top, modpath=("test",), incpath=("test/include",))
-    for p in mod.edit_plan:
-        print(p)
-    metav.edit.execute(mod.edit_plan)
-    
-    
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Process metav scripts in verilog module")
+    parser.add_argument("top_module", metavar="TOP", type=str,
+                        help="the top module to process")
+    parser.add_argument("-I", "--include", metavar="INCDIR", type=str, nargs="+", default=["."],
+                        help="list of include directories")
+    parser.add_argument("-y", "--modpath", metavar="MODPATH", type=str, nargs="+", default=["."],
+                        help="list of directories with module verilog files")
+    parser.add_argument("-n", "--noop", action="store_true", default=False,
+                        help="don't apply changes to file")
+    args = parser.parse_args()
+
+    mod = process(args.top_module, modpath=args.modpath, incpath=args.include)
+    #for p in mod.edit_plan:
+    #    print(p)
+    if not args.noop:
+        metav.edit.execute(mod.edit_plan)
+
