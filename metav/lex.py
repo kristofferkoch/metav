@@ -132,6 +132,7 @@ def vLexer():
     @TOKEN(r'(\\\S+)|([a-zA-Z_]\w*)')
     def t_ID(t):
         nonlocal prev_decl, block_comment, prev_id, cur_module
+        t.line_comment = None
         if t.value[0] == '\\':
             t.value = t.value[1:]
         t.type = keyword_map.get(t.value, 'ID')
@@ -145,12 +146,20 @@ def vLexer():
             block_comment = None
             if prev_id.type == 'MODULE':
                 cur_module = t.value
+            prev_id = t
         if t.type == 'ENDMODULE':
             cur_module = None
+        return t
+
+    @TOKEN(r'$\w*')
+    def t_SYS_ID(t):
+        t.line_comment = None
+        t.block_comment = block_comment
+        block_comment = None
         prev_id = t
         return t
 
-    @TOKEN(r'([0-9]*\'([bB](?P<bin>[01_zxZX?]+)|[hH][0-9a-fA-F_zxZX?]+|[dD][0-9_])|[0-9]+)')
+    @TOKEN(r'([0-9]*\'([bB](?P<bin>[01_zxZX?]+)|[hH][0-9a-fA-F_zxZX?]+|[dD][0-9_]+)|[0-9]+)')
     def t_NUMBER(t):
         nonlocal pos_stack
         t.value = VerilogNumber(t)
@@ -170,7 +179,6 @@ def vLexer():
                 prev_decl.line_comment = t
             else:
                 block_comment = t
-                prev_decl.line_comment = None
             prev_decl = None
         else:
             block_comment = t;

@@ -445,7 +445,7 @@ class ModuleInst(Ast):
             ' (' + ',\n\t\t\t'.join(str(x) for x in self.connections) + ")"
 
 class Connection(Ast):
-    def __init__(self, dot, id_, expr, right):
+    def __init__(self, id_, expr):
         self.id = id_
         self.id.parent = self
         self.expr = expr
@@ -563,6 +563,17 @@ class Block(Statement):
     def __str__(self):
         return "begin\n\t\t" + \
             '\n\t\t'.join(str(x) for x in self.statements) + "\n\tend"
+
+class TaskCall(Statement):
+    def __init__(self, name, arguments):
+        assert isinstance(name, Id)
+        self.name = name
+        self.arguments = arguments
+    def parse_info(self, kw, semi):
+        self.pos = (kw.pos_stack, _get_end(semi))
+    def __str__(self):
+        return str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ');'
+
 
 class Expression(Ast):
     pass
@@ -695,14 +706,6 @@ class Release(Statement):
         self.lval = lval
     def __str__(self):
         return "release " + str(self.lval) + ";"
-
-class TaskCall(Statement):
-    def __init__(self, name, arguments):
-        assert isinstance(name, Id)
-        self.name = name
-        self.arguments = arguments
-    def __str__(self):
-        return str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ');'
 
 class Delay(Statement):
     def __init__(self, delay_expr, statement):

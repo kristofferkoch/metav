@@ -18,7 +18,8 @@ def p_empty(p):
 def p_module(p):
     p[0] = ast.Module(p.slice[1], p[2], p[3], p[4], p[6], p.slice[7])
 
-@G("id : ID")
+@G("""id : ID
+         | SYS_ID""")
 def p_id(p):
     p[0] = ast.Id(p.slice[1])
 
@@ -233,6 +234,8 @@ def p_module_instantiation(p):
 def p_parameter_override_opt(p):
     if len(p) > 2:
         p[0] = p[3]
+    else:
+        p[0] = []
 
 @G("connections_opt : empty")
 def p_connections_opt_empty(p):
@@ -303,9 +306,23 @@ def p_statement_assign(p):
 @G("""statement : CASE '(' expression ')' case_items ENDCASE
                 | CASEZ '(' expression ')' case_items ENDCASE
                 | CASEX '(' expression ')' case_items ENDCASE""")
-def p_statement(p):
+def p_statement_case(p):
     p[0] = ast.Case(p[3], p[5])
     p[0].parse_info(p.slice[1], p.slice[6])
+
+@G("statement : id arglist_opt ';'")
+def p_statement_task_call(p):
+    p[0] = ast.TaskCall(p[1], p[2])
+    p[0].parse_info(p.slice[1], p.slice[3])
+
+@G("""arglist_opt : empty
+                  | '(' ')'
+                  | '(' expressions ')'""")
+def p_arglist_opt(p):
+    if len(p) > 2:
+        p[0] = p[2]
+    else:
+        p[0] = []
 
 @G("""statements : statement statements
                  | empty""")
