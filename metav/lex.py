@@ -36,7 +36,7 @@ symbols = {
 
 tokens = keywords + \
     tuple(["'"+s+"'" for s in symbols]) + (
-    'ID', 'NUMBER', 'STRING'
+    'ID', 'SYS_ID', 'NUMBER', 'STRING'
     )
 
 def vLexer():
@@ -144,17 +144,18 @@ def vLexer():
                 prev_decl = t
             t.block_comment = block_comment
             block_comment = None
-            if prev_id.type == 'MODULE':
+            if prev_id and prev_id.type == 'MODULE':
                 cur_module = t.value
-            prev_id = t
+        prev_id = t
         if t.type == 'ENDMODULE':
             cur_module = None
         return t
 
-    @TOKEN(r'$\w*')
+    @TOKEN(r'\$\w*')
     def t_SYS_ID(t):
         t.line_comment = None
         t.block_comment = block_comment
+        t.type = "SYS_ID"
         block_comment = None
         prev_id = t
         return t

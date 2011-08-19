@@ -393,7 +393,7 @@ class Always(Ast):
         self.pos = (kw.pos_stack, self.statement.pos[1])
         
     def __str__(self):
-        return "always " + str(self.statement)
+        return "always\n" + self.statement.__str__(2)
 
 class Edge(Ast):
     def __init__(self, polarity, signal):
@@ -468,12 +468,11 @@ class Case(Statement):
     def parse_info(self, kw, endcase):
         self.pos = (kw.pos_stack, endcase.pos_stack)
         self.type = kw.value
-        assert type in ("case", "casez", "casex")
         
-    def __str__(self):
-        ret = self.type+"(%s)\n\t\t" % str(self.expr)
-        ret += '\n\t\t'.join(str(x) for x in self.items)
-        ret += "\n\tendcase"
+    def __str__(self, ntabs=0):
+        ret = "\t" * ntabs + self.type + " ( " + str(self.expr) + " )\n"
+        ret += "\n".join(x.__str__(ntabs+1) for x in self.items) + "\n";
+        ret += "\t" * ntabs + "endcase"
         return ret
 
 class CaseItem(Ast):
@@ -491,13 +490,14 @@ class CaseItem(Ast):
         else:
             self.statement = None
             self.pos = (pos0, statement.pos_stack)
-    def __str__(self):
+    def __str__(self, ntabs=0):
+        ret = "\t" * ntabs
         if self.expressions:
-            ret = ', '.join(str(x) for x in self.expressions) + " : "
+            ret += ', '.join(str(x) for x in self.expressions) + " : "
         else:
-            ret = 'default : '
+            ret += 'default : '
         if self.statement:
-            ret += str(self.statement)
+            ret += "\n" + self.statement.__str__(ntabs + 1)
         else:
             ret += ";"
         return ret
@@ -513,8 +513,8 @@ class Assign(Statement):
         if type(rval) != str:
             self.rval.parent = self
         self.is_statement = is_statement
-    def __str__(self):
-        ret = "%s %s %s" % (self.lval.value, str(self.op), str(self.rval))
+    def __str__(self, ntabs=0):
+        ret = "%s%s %s %s" % ("\t"*ntabs, self.lval.value, str(self.op), str(self.rval))
         if self.is_statement:
             ret += ";"
         return ret
@@ -528,11 +528,11 @@ class At(Statement):
         self.statement.parent = self
     def parse_info(self, at):
         self.pos = (at.pos_stack, self.statement.pos[1])
-    def __str__(self):
+    def __str__(self, ntabs=0):
         sens = self.sens
         if not sens: sens = "*"
         else: sens = ' or '.join(str(x) for x in sens)
-        return "@(" + sens + ") " + str(self.statement)
+        return "\t" * ntabs + "@(" + sens + ")\n" + self.statement.__str__(ntabs + 1)
 
 class If(Statement):
     def __init__(self, cond, true, false):
@@ -547,10 +547,10 @@ class If(Statement):
         self.pos = (kw.pos_stack,
                     self.false.pos[1] if self.false else self.true.pos[1])
         
-    def __str__(self):
-        ret = "if ( " + str(self.cond) + " )\n\t\t\t" + str(self.true)
+    def __str__(self, ntabs=0):
+        ret = "\t" * ntabs + "if ( " + str(self.cond) + " )\n" + self.true.__str__(ntabs + 1)
         if self.false:
-            ret += "\n\t\telse\n\t\t\t" + str(self.false)
+            ret += "\n" + "\t" * ntabs + "else\n" + self.false.__str__(ntabs + 1)
         return ret
 
 class Block(Statement):
@@ -560,9 +560,10 @@ class Block(Statement):
     def parse_info(self, begin, end):
         self.pos = (begin.pos_stack, _get_end(end))
         
-    def __str__(self):
-        return "begin\n\t\t" + \
-            '\n\t\t'.join(str(x) for x in self.statements) + "\n\tend"
+    def __str__(self, ntabs=0):
+        return "\t" * ntabs + "begin\n" + \
+            '\n'.join(x.__str__(ntabs + 1) for x in self.statements) + "\n" + \
+            "\t" * ntabs + "end"
 
 class TaskCall(Statement):
     def __init__(self, name, arguments):
@@ -571,8 +572,8 @@ class TaskCall(Statement):
         self.arguments = arguments
     def parse_info(self, kw, semi):
         self.pos = (kw.pos_stack, _get_end(semi))
-    def __str__(self):
-        return str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ');'
+    def __str__(self, ntabs=0):
+        return "\t" * ntabs + str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ');'
 
 
 class Expression(Ast):
