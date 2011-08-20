@@ -118,3 +118,6 @@ class String(VerilogNumber):
         self.size = len(string)*8
         self.orig = string
 
+class VerilogReal(Expression):
+    def __init__(self, string):
+        self.string = string

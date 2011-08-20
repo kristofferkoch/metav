@@ -21,8 +21,9 @@ import ast
 
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',
             'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ',
-            'CASEX', 'ENDCASE',
-            'PARAMETER', 'LOCALPARAM', 'BEGIN', 'END', 'IF', 'ELSE', 'DEFAULT')
+            'CASEX', 'ENDCASE', 'FUNCTION', 'AUTOMATIC', 'ENDFUNCTION',
+            'PARAMETER', 'LOCALPARAM', 'BEGIN', 'END', 'IF', 'ELSE', 'DEFAULT',
+            )
 keyword_map = {}
 for r in keywords:
     keyword_map[r.lower()] = r;
@@ -36,7 +37,7 @@ symbols = {
 
 tokens = keywords + \
     tuple(["'"+s+"'" for s in symbols]) + (
-    'ID', 'SYS_ID', 'NUMBER', 'STRING'
+    'ID', 'SYS_ID', 'NUMBER', 'STRING', 'REAL',
     )
 
 def vLexer():
@@ -160,12 +161,18 @@ def vLexer():
         prev_id = t
         return t
 
+    @TOKEN(r'([0-9]*\.[0-9]+|[0-9]+\.|[0-9]+\.?[0-9]*e[0-9]+)')
+    def t_REAL(t):
+        t.value = VerilogReal(t)
+        return t
+
     @TOKEN(r'([0-9]*\'([bB](?P<bin>[01_zxZX?]+)|[hH][0-9a-fA-F_zxZX?]+|[dD][0-9_]+)|[0-9]+)')
     def t_NUMBER(t):
         nonlocal pos_stack
         t.value = VerilogNumber(t)
         #t.value.pos_stack = pos_stack[1:]
         return t
+
     @TOKEN(r'"(\\"|[^"])*"')
     def t_STRING(t):
         t.value = String(t)
