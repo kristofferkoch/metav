@@ -33,6 +33,11 @@ def _find_file(modulename, modpath=('.',)):
             
 
 def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
+    def get_module(name):
+        nonlocal modpath, incpath, debug
+        ret = process(name, modpath=modpath, incpath=incpath,
+                      debug=debug, module_dict=module_dict)
+        return ret
     if top in module_dict:
         return module_dict[top]
     lexer = vLexer()
@@ -51,13 +56,10 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
         
         for iname in module.insts:
             inst = module.insts[iname]
-            if hasattr(inst, 'module'): continue
-            # TODO: do this lazily
-            inst.module = process(iname, modpath=modpath, incpath=incpath,
-                                  debug=debug, module_dict=module_dict)
-            inst.module.parent = module
+            assert isinstance(inst, metav.vast.ModuleInsts)
+            inst._get_module = get_module
         module.edit_plan = edit_plan
-        module.execute_metav(None, includes)
+        module.execute_metav(get_module, includes)
         return module
     assert False
     

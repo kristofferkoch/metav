@@ -15,7 +15,7 @@ module inst;
     #print(globals())
     for iname in module.insts:
       print("In module "+iname)
-      print(module.insts[iname].module.ids)
-      assert(module.insts[iname].module.parent == module)
+      print(module.insts[iname].get_module().ids)
+      assert(module.insts[iname].get_module().parent == module)
     */
 endmodule // inst

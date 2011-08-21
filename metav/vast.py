@@ -149,8 +149,7 @@ class Module(Ast):
                 o = decl.ast
                 assert decl.id.value == id_
                 if o.is_reg:
-                    regdecl = self.Decl(Reg(o.reg_kw, o.range,
-                                            [decl.id], decl.id),
+                    regdecl = self.Decl(Reg([decl.id], o.range),
                                         decl.id)
                     to_add.add(regdecl)
             self.ids[id_].update(to_add)
@@ -440,6 +439,17 @@ class ModuleInsts(Ast):
             p.parent = self
         self.insts = insts
         for i in insts: i.parent = self
+        self.module = None
+
+    def get_module(self):
+        if self.module:
+            return self.module
+        ret = self._get_module(self.module_name.value)
+        assert isinstance(self.parent, Module)
+        ret.parent = self.parent
+        self.module = ret;
+        return ret
+
     def __str__(self):
         ret = self.module_name.value + " "
         if self.param_overrides:
