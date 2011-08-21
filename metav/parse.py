@@ -148,20 +148,28 @@ def p_module_items(p):
                   | continous_assign ';'
                   | module_instantiation ';'
                   | always_block
-                  | function_declaration""")
+                  | function_declaration
+                  | metav""")
 def p_module_item(p):
     p[0] = p[1]
     if len(p) > 2:
         p[0].extend_pos(p.slice[2])
 
+@G("metav : METAV")
+def p_metav(p):
+    p[0] = ast.Metav(p[1])
+
 @G("""function_declaration : FUNCTION automatic_opt range_opt id ';' function_item_declarations statement ENDFUNCTION""")
 def p_function_declaration(p):
-    p[0]
+    p[0] = ast.FunctionDeclaration(p[2], p[3], p[4], p[6], p[7])
+    p[0].parse_info(p.slice[1], p.slice[8])
 
-@G("""automatic_opt : empty
-                    | AUTOMATIC""")
-def p_automatic_opt(p):
-    p[0] = p[1]
+@G("automatic_opt : empty")
+def p_automatic_empty(p):
+    p[0] = False
+@G("automatic_opt : AUTOMATIC")
+def p_automatic_yes(p):
+    p[0] = True
 
 @G("""function_item_declarations : function_item_declaration
                                  | function_item_declaration function_item_declarations""")
@@ -171,11 +179,12 @@ def p_function_item_declarations(p):
     else:
         p[0] = [p[1]]
 
-@G("""function_item_declaration : input_decl
-                                 | parameter_decl
-                                 | reg_decl""")
+@G("""function_item_declaration : input_decl ';'
+                                | parameter_decl ';'
+                                | reg_decl ';'""")
 def p_function_item_declaration(p):
     p[0] = p[1]
+    p[0].extend_pos(p.slice[2])
 
 @G("""parameter_decl : PARAMETER range_opt id_assigns
                      | LOCALPARAM range_opt id_assigns""")
@@ -428,8 +437,8 @@ def p_expression_id(p):
 
 @G("function_call : id '(' expressions ')'")
 def p_function_call(p):
-    p[0] = FunctionCall(p[1], p[3])
-    p[0].parse_info(p.slice[1], p.slice[4])
+    p[0] = ast.FunctionCall(p[1], p[3])
+    p[0].parse_info(p.slice[4])
 
 
 @G("concatenation : '{' expressions '}'")

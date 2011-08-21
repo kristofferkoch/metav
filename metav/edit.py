@@ -21,14 +21,16 @@ def _sort_key(p):
     return pos[1], pos[2]
 
 def execute(edit_plan):
-    file = {}
-    rope = {}
+    file = None
+    rope = [] # A array of strings to be concatenated
     filename = None
     for p in sorted(edit_plan, key=_sort_key):
-        instruction = p[0]
-        begin = p[1][-1]
-        assert begin[0] == "file"
-        if filename != begin[1]:
+        print(p)
+        instruction, position_stack = p[0:2]
+        start_position = position_stack[-1]
+        begin_type, begin_file, begin_pos = start_position[0:3]
+        assert begin_type == "file"
+        if filename != begin_file:
             if filename:
                 # Flush data
                 fd = open(filename+".out", 'w')
@@ -36,27 +38,29 @@ def execute(edit_plan):
                     fd.write(string)
                 fd.write(file['contents'])
                 fd.close()
-            filename = begin[1]
+            filename = begin_file
             file = {'contents': open(filename).read(),
                     'pos': 0,}
             rope = []
-        begin = begin[2]
-        assert begin >= file['pos']
+        assert begin_pos >= file['pos'], "begin_pos (%d) < file['pos'] (%d)" % (begin_pos, file['pos'])
 
-        if begin > file['pos']:
-            to_copy = begin - file['pos']
+        if begin_pos > file['pos']:
+            to_copy = begin_pos - file['pos']
             rope.append(file['contents'][:to_copy])
             file['pos'] += to_copy
             file['contents'] = file['contents'][to_copy:]
+
+        assert begin_pos == file['pos']
+        print("At %d" % begin_pos)
 
         if instruction in ("remove", "delete"):
             end   = p[2][-1]
             assert end[0] == 'file'
             assert end[1] == filename
             end   = end[2]
-            assert begin < end
+            assert begin_pos < end
 
-            to_skip = end - begin
+            to_skip = end - begin_pos
             file['pos'] += to_skip
             skipped = file['contents'][:to_skip]
             file['contents'] = file['contents'][to_skip:]

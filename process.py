@@ -35,10 +35,10 @@ def _find_file(modulename, modpath=('.',)):
 def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
     if top in module_dict:
         return module_dict[top]
-    lexer, codes = vLexer()
+    lexer = vLexer()
     parser = vParser()
     filename = _find_file(top, modpath=modpath)
-    p, edit_plan = preproc(filename, state = {'incpath': incpath,})
+    p, edit_plan, includes = preproc(filename, state = {'incpath': incpath,})
     #print(p)
     modules = parser.parse(input=p, lexer=lexer, debug=debug)
     for module in modules:
@@ -52,17 +52,12 @@ def process(top, modpath=('.',), incpath=('.',), debug=False, module_dict={}):
         for iname in module.insts:
             inst = module.insts[iname]
             if hasattr(inst, 'module'): continue
-            # TODO: maybe do this lazily
+            # TODO: do this lazily
             inst.module = process(iname, modpath=modpath, incpath=incpath,
                                   debug=debug, module_dict=module_dict)
             inst.module.parent = module
         module.edit_plan = edit_plan
-        for code in codes.get(name, ()):
-            exec(code, {'module': module,
-                        'get_module': None, #TODO
-                        'out': None,
-                        'ast': metav.vast,
-                        })
+        module.execute_metav(None, includes)
         return module
     assert False
     

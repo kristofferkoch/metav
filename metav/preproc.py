@@ -23,6 +23,7 @@ def _include(m, state, filestate):
         if os.path.isfile(p):
             ret, edit_plan = preproc(p, state)
             filestate['edit_plan'] += edit_plan
+            filestate['includes'] += filename
             return ret
     raise IOError("Could not find %s in include path" % (filename, ))
 
@@ -111,12 +112,14 @@ def preproc(filename, state = {}):
         'lineno': 1,
         'char': 0,
         'edit_plan': [],
+        'includes': [],
         }
     cont = open(filename).read()
     return ("`file(%s)" % filename +
             _process(cont, state, filestate) +
             "`endfile(%s)" % filename,
-            filestate['edit_plan'])
+            filestate['edit_plan'],
+            filestate['includes'])
     
 def _process(cont, state, filestate):
     ret = ""

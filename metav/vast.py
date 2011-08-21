@@ -16,6 +16,7 @@
 """Objects for constructing a Verilog Abstract Syntax Tree (vast)"""
 
 import metav.literal
+import ast
 
 def _get_end(i):
     "Given a pos_stack, calculate the position + length of identifier"
@@ -74,9 +75,18 @@ class Module(Ast):
         self.modports = modports    
         self.items = items
         self._build_ids()
-        
+        self.metav = [m for m in self.items if isinstance(m, Metav)]
+
         self.insts = dict((i.module_name.value, i) for i in self.items
                           if type(i) == ModuleInsts)
+
+    def execute_metav(self, get_module, includes):
+        for m in self.metav:
+            exec(m.code, {'module':     self,
+                          'get_module': get_module,
+                          'ast':        metav.vast,
+                          'includes':   includes,
+                          })
 
     def _build_ids(self):
         self.ids = {}
@@ -90,7 +100,7 @@ class Module(Ast):
 
     def _extract_declarations(self):
         for i in self.items:
-            assert isinstance(i, Ast)
+            assert isinstance(i, Ast), "%s is not Ast" % repr(i)
             i.parent = self
             if hasattr(i, 'ids'):          ids = i.ids
             elif hasattr(i, 'ids_or_mem'): ids = i.ids_or_mem
@@ -233,6 +243,16 @@ class Module(Ast):
 
         assert False, "Could not find child "+repr(child)
     
+class Metav(Ast):
+    def __init__(self, from_lex):
+        source, filename, first_line = from_lex
+        parsed_ast = ast.parse(source, filename)
+        ast.increment_lineno(parsed_ast, first_line)
+        code = compile(parsed_ast, filename=filename, mode='exec')
+        self.source = source
+        self.code = code
+    def __str__(self):
+        return "/*metav\n%s\n\t*/" % self.source
 
 class Port(Ast):
     def __init__(self, ids, range=None):
@@ -456,6 +476,35 @@ class Connection(Ast):
     def __str__(self):
         return "."+self.id.value+'('+str(self.expr)+')'
 
+class FunctionDeclaration(Ast):
+    def __init__(self, automatic, range_opt, name, declarations, statement):
+        assert isinstance(automatic, bool)
+        assert isinstance(range_opt, (type(None), Range))
+        assert isinstance(name, Id)
+        assert isinstance(declarations, list)
+        assert isinstance(declarations[0], Ast)
+        assert isinstance(statement, Statement)
+        self.automatic = automatic
+        self.range_opt = range_opt
+        self.name = name
+        self.declarations = declarations
+        self.statement = statement
+        if range_opt:
+            range_opt.parent = self
+        name.parent = self
+        for d in declarations:
+            d.parent = self
+        statement.parent = self
+    def parse_info(self, function, endfunction):
+        self.pos = (function.pos_stack, _get_end(endfunction))
+    def __str__(self):
+        auto = "automatic " if self.automatic else ""
+        range = str(self.range_opt) + " " if self.range_opt else ""
+        return "function " + auto + range + str(self.name) + ";\n\t\t" \
+            + '\n\t\t'.join(str(x) for x in self.declarations) \
+            + "\n" + self.statement.__str__(2) \
+            + "\n\tendfunction"
+
 class Statement(Ast):
     pass
 
@@ -578,6 +627,19 @@ class TaskCall(Statement):
 
 class Expression(Ast):
     pass
+
+class FunctionCall(Expression):
+    def __init__(self, name, arguments):
+        assert isinstance(name, Id)
+        self.name = name
+        for a in arguments:
+            assert isinstance(a, Expression)
+            a.parent = self
+        self.arguments = arguments
+    def parse_info(self, endparan):
+        self.pos = (self.name.pos[0], _get_end(endparan))
+    def __str__(self):
+        return str(self.name) + '(' + ', '.join(str(x) for x in self.arguments) + ')'
 
 class Id(Expression):
     def __init__(self, id_):

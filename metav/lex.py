@@ -17,7 +17,6 @@ import re
 import ply.lex
 import copy
 from .literal import VerilogNumber, String
-import ast
 
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',
             'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ',
@@ -37,7 +36,7 @@ symbols = {
 
 tokens = keywords + \
     tuple(["'"+s+"'" for s in symbols]) + (
-    'ID', 'SYS_ID', 'NUMBER', 'STRING', 'REAL',
+    'ID', 'SYS_ID', 'NUMBER', 'STRING', 'REAL', 'METAV',
     )
 
 def vLexer():
@@ -129,10 +128,9 @@ def vLexer():
     prev_decl = None
     block_comment = None
     prev_id = None
-    cur_module = None
     @TOKEN(r'(\\\S+)|([a-zA-Z_]\w*)')
     def t_ID(t):
-        nonlocal prev_decl, block_comment, prev_id, cur_module
+        nonlocal prev_decl, block_comment, prev_id
         t.line_comment = None
         if t.value[0] == '\\':
             t.value = t.value[1:]
@@ -145,11 +143,7 @@ def vLexer():
                 prev_decl = t
             t.block_comment = block_comment
             block_comment = None
-            if prev_id and prev_id.type == 'MODULE':
-                cur_module = t.value
         prev_id = t
-        if t.type == 'ENDMODULE':
-            cur_module = None
         return t
 
     @TOKEN(r'\$\w*')
@@ -202,10 +196,8 @@ def vLexer():
             if p[0] == 'file': return p
         assert False
 
-    codes = {}
     @TOKEN(r'/\*+\s*metav[\s\*]*?\n+(?P<white>[\t ]*)(?P<code>(.|\n)*?)\s*\*/')
     def t_METAV(t):
-        nonlocal codes, cur_module
         white_prefix = t.lexer.lexmatch.group('white')
         code = white_prefix + t.lexer.lexmatch.group('code')
         lines = []
@@ -214,16 +206,12 @@ def vLexer():
             if not line.startswith(white_prefix):
                 raise Exception("python code with unclean white prefix")
             lines.append(line[len(white_prefix):])
-        code = '\n'.join(lines)
-        #print("Got code block in "+cur_module+":\n"+code+"\n#endcode")
+        source = '\n'.join(lines)
         filepos = _get_file()
-        past = ast.parse(code, filepos[1])
-        ast.increment_lineno(past, filepos[3])
-        code = compile(past, filename=filepos[1], mode='exec')
-        if cur_module not in codes:
-            codes[cur_module] = []
-        codes[cur_module].append(code)
-        return None
+        filename = filepos[1]
+        first_line = filepos[3]
+        t.value = (source, filename, first_line)
+        return t
 
     @TOKEN(r'/\*metav\ generated:\*/(.|\n)*?/\*end\ metav\ generated\*/')
     def t_METAV_GENERATED(t):
@@ -256,17 +244,5 @@ def vLexer():
     def t_error(t):
         print("Lexer error");
 
-    return ply.lex.lex(debug=0), codes
+    return ply.lex.lex(debug=0)
 
-if __name__ == "__main__":
-    l, codes = vLexer()
-    import preproc
-    l.input(preproc.preproc("../test/simple.v"))
-    tokens = list(l)
-    for tok in tokens:
-        print(repr(tok))
-    for module in codes:
-        #print(ast.dump(code, include_attributes=True))
-        #print(dir(code))
-        for code in codes[module]:
-            exec(code)
