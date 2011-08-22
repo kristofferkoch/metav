@@ -11,3 +11,6 @@
 * Make a regression testing framework
 
 * Add support for `MACRO(x) "functions"
+
+* Add a nice interface for searching and matching AST. Maybe use some
+   kind of BNF for this also?
