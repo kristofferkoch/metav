@@ -168,9 +168,10 @@ class Module(Ast):
                 self.subtype = "mem" if type(id_) == MemReg else "reg"
             elif type(ast) == Wire:
                 self.type = 'wire'
+            elif isinstance(ast, Genvars):
+                self.type = "genvar"
             else:
-                print(str(ast))
-                assert(False)
+                assert False, "Unknown declaration '%r'" % ast
             self.id = id_
             self.range = ast.range
         def __str__(self):
@@ -450,8 +451,8 @@ class ModuleInsts(Ast):
         self.module = ret;
         return ret
 
-    def __str__(self):
-        ret = self.module_name.value + " "
+    def __str__(self, ntabs = 0):
+        ret = "\t" * ntabs + self.module_name.value + " "
         if self.param_overrides:
             ret += "#(" + \
                 ',\n\t\t\t'.join(str(x) for x in self.param_overrides) + \
@@ -762,6 +763,73 @@ class Concatenation(Expression):
         
     def __str__(self):
         return '{' + ', '.join(str(x) for x in self.expressions) + '}'
+
+
+class Genvars(Ast):
+    def __init__(self, ids):
+        self.ids = ids
+        self.range = None
+    def parse_info(self, genvar):
+        self.pos = (genvar.pos_stack, self.ids[-1].pos[1])
+    def __str__(self):
+        return "genvar " + ', '.join(str(x) for x in self.ids) + ";"
+
+class Generate(Ast):
+    def __init__(self, item):
+        self.item = item
+    def parse_info(self, generate, endgenerate):
+        self.pos = (generate.pos_stack, _get_end(endgenerate))
+    def __str__(self):
+        return "generate\n"+self.item.__str__(2) + "\n\tendgenerate"
+
+class GenerateBlock(Ast):
+    def __init__(self, name, items):
+        self.name = name
+        self.items = items
+    def parse_info(self, begin, end):
+        self.pos = (begin.pos_stack, _get_end(end))
+    def __str__(self, ntabs = 0):
+        return "\t" * ntabs + "begin : "+str(self.name)+"\n"+\
+            '\n'.join(x.__str__(ntabs + 1) for x in self.items) + "\n" +\
+            "\t" * ntabs + "end"
+
+class GenerateFor(Ast):
+    def __init__(self, init, cond, incr, item):
+        self.init = init
+        self.cond = cond
+        self.incr = incr
+        self.item = item
+    def parse_info(self, for_):
+        self.pos = (for_.pos_stack, self.item.pos[1])
+    def __str__(self, ntabs = 0):
+        return "\t" * ntabs +\
+            "for ("+str(self.init)+"; "+str(self.cond)+"; "+str(self.incr)+")\n" \
+            + self.item.__str__(ntabs + 1)
+class GenerateCaseItem(Ast):
+    def __init__(self, expressions, item):
+        self.expressions = expressions
+        self.item = item
+        if expressions:
+            self.pos = (expressions[0].pos[0], item.pos[1])
+    def parse_info(self, default):
+        self.pos = (default.pos_stack, self.item.pos[1])
+    def __str__(self, ntabs = 0):
+        if self.expressions:
+            return "\t" * ntabs + ', '.join(str(x) for x in self.expressions) + " :\n" +\
+                self.item.__str__(ntabs + 1)
+        else:
+            return "\t" * ntabs + "default :\n" + self.item.__str__(ntabs + 1)
+
+class GenerateCase(Ast):
+    def __init__(self, expression, case_items):
+        self.expression = expression
+        self.case_items = case_items
+    def parse_info(self, case, endcase):
+        self.pos = (case.pos_stack, _get_end(endcase))
+    def __str__(self, ntabs=0):
+        return "\t" * ntabs + "case ("+str(self.expression)+")\n" +\
+            "\n".join(x.__str__(ntabs + 1) for x in self.case_items)+"\n"+\
+            "\t" * ntabs + "endcase"
 
 # Objects for emitting only:
 class Force(Assign):

@@ -21,6 +21,7 @@ from .literal import VerilogNumber, String
 keywords = ('MODULE', 'ENDMODULE', 'INPUT', 'OUTPUT', 'REG', 'WIRE', 'INOUT',
             'ALWAYS', 'ASSIGN', 'POSEDGE', 'NEGEDGE', 'OR', 'CASE', 'CASEZ',
             'CASEX', 'ENDCASE', 'FUNCTION', 'AUTOMATIC', 'ENDFUNCTION',
+            'GENERATE', 'ENDGENERATE', 'FOR', 'WHILE', 'GENVAR',
             'PARAMETER', 'LOCALPARAM', 'BEGIN', 'END', 'IF', 'ELSE', 'DEFAULT',
             )
 keyword_map = {}

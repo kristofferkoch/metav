@@ -145,15 +145,85 @@ def p_module_items(p):
                   | inout_decl ';'
                   | wire_decl ';'
                   | reg_decl ';'
+                  | genvar_decl ';'
                   | continous_assign ';'
                   | module_instantiation ';'
                   | always_block
                   | function_declaration
-                  | metav""")
+                  | metav
+                  | generate""")
 def p_module_item(p):
     p[0] = p[1]
     if len(p) > 2:
         p[0].extend_pos(p.slice[2])
+
+@G("genvar_decl : GENVAR list_of_ids")
+def p_genvar_decl(p):
+    p[0] = ast.Genvars(p[2])
+    p[0].parse_info(p.slice[1])
+
+@G("generate : GENERATE generate_item ENDGENERATE")
+def p_generate(p):
+    p[0] = ast.Generate(p[2])
+    p[0].parse_info(p.slice[1], p.slice[3])
+
+@G("""generate_item : generate_for
+                    | generate_if
+                    | generate_case
+                    | generate_block
+                    | module_item""")
+def p_generate_item(p):
+    p[0] = p[1]
+
+@G("generate_for : FOR '(' assign ';' expression ';' assign ')' generate_item")
+def p_generate_for(p):
+    p[0] = ast.GenerateFor(p[3], p[5], p[7], p[9]);
+    p[0].parse_info(p.slice[1])
+
+@G("""generate_if : IF '(' expression ')' generate_item ELSE generate_item
+                  | IF '(' expression ')' generate_item %prec LOWER_THAN_ELSE""")
+def p_generate_if(p):
+    if len(p) > 6:
+        p[0] = ast.GenerateIf(p[3], p[5], p[7])
+    else:
+        p[0] = ast.GenerateIf(p[3], p[5], None)
+    p[0].parse_info(p.slice[1])
+
+@G("generate_case : CASE '(' expression ')' generate_case_items ENDCASE")
+def p_generate_case(p):
+    p[0] = ast.GenerateCase(p[3], p[5])
+    p[0].parse_info(p.slice[1], p.slice[6])
+
+@G("""generate_case_items : empty
+                          | generate_case_item generate_case_items""")
+def p_generate_case_items(p):
+    if p[1]:
+        p[0] = [p[1]] + p[2]
+    else:
+        p[0] = []
+
+@G("""generate_case_item : DEFAULT ':' generate_item
+                         | DEFAULT generate_item""")
+def p_generate_case_item_default(p):
+    p[0] = ast.GenerateCaseItem(None, p[len(p)-1])
+    p[0].parse_info(p.slice[1])
+
+@G("generate_case_item : expressions ':' generate_item")
+def p_generate_case_item(p):
+    p[0] = ast.GenerateCaseItem(p[1], p[3])
+
+@G("generate_block : BEGIN ':' id generate_items END")
+def p_generate_block(p):
+    p[0] = ast.GenerateBlock(p[3], p[4])
+    p[0].parse_info(p.slice[1], p.slice[5])
+
+@G("""generate_items : empty
+                     | generate_item generate_items""")
+def p_generate_items(p):
+    if p[1]:
+        p[0] = [p[1]] + p[2]
+    else:
+        p[0] = []
 
 @G("metav : METAV")
 def p_metav(p):
@@ -319,6 +389,14 @@ def p_statement_block(p):
                 | IF '(' expression ')' statement_opt ELSE statement_opt""")
 def p_statement_if(p):
     p[0] = ast.If(p[3], p[5], p[7] if len(p)>=8 else None)
+    p[0].parse_info(p.slice[1])
+@G("statement : FOR '(' assign ';' expression ';' assign ')' statement_opt")
+def p_statement_for(p):
+    p[0] = ast.For(p[3], p[5], p[7], p[9])
+    p[0].parse_info(p.slice[1])
+@G("statement : WHILE '(' expression ')' statement_opt")
+def p_statement_while(p):
+    p[0] = ast.While(p[3], p[5])
     p[0].parse_info(p.slice[1])
 @G("""statement : '@' '*' statement_opt
                 | '@' '(' '*' ')' statement_opt""")
