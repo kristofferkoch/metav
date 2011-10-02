@@ -699,10 +699,16 @@ class Id(Expression):
             self.pos = (id_.pos_stack, _get_end(id_))
             self.value = id_.value
             self.block_comment = getattr(id_.block_comment, "value", None)
-            self.line_comment = getattr(id_.line_comment, "value", None)
+            self.id = id_
         else:
             assert isinstance(id_, str)
             self.value = id_
+    def __getattr__(self, name):
+        if name == "line_comment":
+            self.line_comment = getattr(id_.line_comment, "value", None)
+            return self.line_comment
+        else:
+            raise AttributeError(name)
     def __str__(self):
         # TODO: output escaped ids correctly
         return self.value
