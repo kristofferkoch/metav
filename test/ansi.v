@@ -7,5 +7,9 @@ module ansi(input clk, rst_n, d_in,
        d_out <= 1'b0;
      else
        d_out <= d_in;
+
+   /*metav
+    print("portstyle: "+ module.portstyle)
+    */
    
 endmodule // ansi

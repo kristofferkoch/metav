@@ -70,7 +70,7 @@ class Module(Ast):
         assert isinstance(name, Id)
         self.name = name
         self.block_comment = name.block_comment
-
+        self.portstyle = None
         self.modparams = modparams
         self.modports = modports    
         self.items = items
@@ -100,13 +100,17 @@ class Module(Ast):
 
     def _extract_declarations(self):
         for i in self.items:
-            assert isinstance(i, Ast), "%s is not Ast" % repr(i)
+            assert isinstance(i, Ast), "'%r' is not Ast" % i
             i.parent = self
             if hasattr(i, 'ids'):          ids = i.ids
             elif hasattr(i, 'ids_or_mem'): ids = i.ids_or_mem
             elif type(i) == Wire:          ids = i.ids_or_assigns
             elif type(i) == Parameter:     ids = i.assigns
             else:                          continue
+            if isinstance(i, Port):
+                if self.portstyle not in (None, "regular"):
+                    raise Exception("Not coherent portstyle at %r" % i)
+                self.portstyle = "regular"
             for id_or_assign in ids:
                 if type(id_or_assign) == Assign:
                     self.ids.setdefault(id_or_assign.lval.value, set()).add(
@@ -118,6 +122,7 @@ class Module(Ast):
     def _extract_modports(self):
         if not self.modports or not isinstance(self.modports[0], Port):
             return
+        self.portstyle = "ansi"
         for p in self.modports:
             assert isinstance(p, Port)
             p.parent = self
@@ -204,8 +209,8 @@ class Module(Ast):
         return ret
 
     def add_item(self, item):
-        self._make_edit_plan()
         assert isinstance(item, Ast)
+        self._make_edit_plan()
         item.parent = self
         self.items.append(item)
         instruction = ('insert', self.append_pos,  item)
@@ -215,9 +220,16 @@ class Module(Ast):
     def add_port(self, port):
         assert isinstance(port, Port)
         self._make_edit_plan()
+        if self.portstyle == "regular":
+            pass
+        elif self.portstyle = "ansi":
+            pass
+        else:
+            assert False, "Unknown portstyle %r" % self.portstyle
         raise NotImplementedError
     def delete_port(self, name):
-        pass
+        self._make_edit_plan()
+        raise NotImplementedError
 
     def delete_child(self, child):
         # First, check if it is a module item
@@ -318,8 +330,8 @@ class ContAssigns(Ast):
         last = self.assigns[-1]
         self.pos = (kw.pos_stack, last.pos[1])
         
-    def __str__(self):
-        return "assign " + '\n'.join(str(x) for x in self.assigns) + ";"
+    def __str__(self, ntabs = 0):
+        return "assign\n" + '\n'.join(x.__str__(ntabs + 1) for x in self.assigns) + ";"
 
 class Parameter(Ast):
     def __init__(self, assigns, type="parameter", range=None):
@@ -613,6 +625,35 @@ class If(Statement):
             ret += "\n" + "\t" * ntabs + "else\n" + self.false.__str__(ntabs + 1)
         return ret
 
+class For(Statement):
+    def __init__(self, init, cond, incr, statement):
+        self.init = init
+        init.parent = self
+        self.cond = cond
+        cond.parent = self
+        self.incr = incr
+        incr.parent = self
+        self.statement = statement
+        statement.parent = self
+    def parse_info(self, for_):
+        self.pos = (for_.pos_stack, self.statement.pos[1])
+    def __str__(self, ntabs = 0):
+        return "\t" * ntabs + "for (" + str(self.init) + "; " + \
+            str(self.cond) + "; " + str(self.incr) + ")\n" + \
+            self.statement.__str__(ntabs + 1)
+
+class While(Statement):
+    def __init__(self, cond, statement):
+        self.cond = cond
+        cond.parent = self
+        self.statement = statement
+        statement.parent = self
+    def parse_info(self, while_):
+        self.pos = (while_.pos_stack, self.statement.pos[1])
+    def __str__(self, ntabs = 0):
+        return "\t"*ntabs + "while (" + str(self.cond) + ")\n" + \
+            self.statement.__str__(ntabs + 1)
+
 class Block(Statement):
     def __init__(self, name, statements):
         self.name = name
@@ -777,6 +818,7 @@ class Genvars(Ast):
 class Generate(Ast):
     def __init__(self, item):
         self.item = item
+        item.parent = self
     def parse_info(self, generate, endgenerate):
         self.pos = (generate.pos_stack, _get_end(endgenerate))
     def __str__(self):
@@ -786,6 +828,9 @@ class GenerateBlock(Ast):
     def __init__(self, name, items):
         self.name = name
         self.items = items
+        name.parent = self
+        for i in items:
+            i.parent = self
     def parse_info(self, begin, end):
         self.pos = (begin.pos_stack, _get_end(end))
     def __str__(self, ntabs = 0):
@@ -793,23 +838,46 @@ class GenerateBlock(Ast):
             '\n'.join(x.__str__(ntabs + 1) for x in self.items) + "\n" +\
             "\t" * ntabs + "end"
 
+class GenerateIf(Ast):
+    def __init__(self, expression, true, false):
+        self.expression = expression
+        expression.parent = self
+        self.true = true
+        if true:
+            true.parent = self
+            self.last = true
+        self.false = false
+        if false:
+            false.parent = self
+            self.last = false
+    def parse_info(self, if_):
+        self.pos = (if_.pos_stack, self.last.pos[1])
+
 class GenerateFor(Ast):
     def __init__(self, init, cond, incr, item):
         self.init = init
         self.cond = cond
         self.incr = incr
         self.item = item
+        init.parent = self
+        cond.parent = self
+        incr.parent = self
+        item.parent = self
     def parse_info(self, for_):
         self.pos = (for_.pos_stack, self.item.pos[1])
     def __str__(self, ntabs = 0):
         return "\t" * ntabs +\
             "for ("+str(self.init)+"; "+str(self.cond)+"; "+str(self.incr)+")\n" \
             + self.item.__str__(ntabs + 1)
+
 class GenerateCaseItem(Ast):
     def __init__(self, expressions, item):
         self.expressions = expressions
         self.item = item
+        item.parent = self
         if expressions:
+            for e in expressions:
+                e.parent = self
             self.pos = (expressions[0].pos[0], item.pos[1])
     def parse_info(self, default):
         self.pos = (default.pos_stack, self.item.pos[1])
@@ -823,7 +891,10 @@ class GenerateCaseItem(Ast):
 class GenerateCase(Ast):
     def __init__(self, expression, case_items):
         self.expression = expression
+        expression.parent = self
         self.case_items = case_items
+        for i in case_items:
+            i.parent = self
     def parse_info(self, case, endcase):
         self.pos = (case.pos_stack, _get_end(endcase))
     def __str__(self, ntabs=0):

@@ -32,6 +32,7 @@ module simple(/*AUTOARG*/
     "Docstring goes here. Note the indentation."
     x = "hello world"
     print(x.capitalize())
+    print("portstyle: "+ module.portstyle)
     module.add_item(ast.Input(ast.Id("generated_input")))
     for i in module.items:
        if isinstance(i, ast.ContAssigns):
